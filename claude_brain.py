@@ -36,34 +36,71 @@ def add_brain_log(msg, level="info"):
     print(f"[Brain {entry['time']}] {msg}")
 
 
-def ask_ai(prompt, max_tokens=500):
-    """ถาม AI ผ่าน proxy ของเรา (ฟรี!)"""
-    payload = json.dumps({
-        "model": "auto",
-        "messages": [
-            {"role": "system", "content": "คุณเป็นผู้เชี่ยวชาญด้าน AI API และระบบ proxy ตอบเป็นภาษาไทย กระชับ ตรงประเด็น"},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
-    }).encode("utf-8")
-
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "FindFreeAI-Brain/1.0",
-    }
-
+def ask_claude_cli(prompt):
+    """เรียก Claude Code CLI จริงๆ (ฉลาดกว่า แต่เสีย token)"""
+    import subprocess
+    add_brain_log("🤖 เรียก Claude Code CLI...", "info")
     try:
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--max-turns", "3"],
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+        output = result.stdout.strip()
+        if output:
+            add_brain_log(f"Claude CLI ตอบแล้ว ({len(output)} chars)", "ok")
+            return output
+        else:
+            add_brain_log(f"Claude CLI ไม่มี output: {result.stderr[:100]}", "warn")
+            return None
+    except subprocess.TimeoutExpired:
+        add_brain_log("Claude CLI timeout (120s)", "error")
+        return None
+    except FileNotFoundError:
+        add_brain_log("ไม่พบ claude CLI — ใช้ AI ฟรีแทน", "warn")
+        return None
+    except Exception as e:
+        add_brain_log(f"Claude CLI error: {e}", "error")
+        return None
+
+
+def ask_ai(prompt, max_tokens=500):
+    """ถาม AI — ลอง proxy ก่อน ถ้าไม่ได้ fallback เป็น Claude CLI"""
+    # 1) ลอง proxy ฟรีก่อน
+    add_brain_log("ลองถาม AI ผ่าน Proxy (ฟรี)...", "info")
+    try:
+        payload = json.dumps({
+            "model": "auto",
+            "messages": [
+                {"role": "system", "content": "คุณเป็นผู้เชี่ยวชาญด้าน AI API และระบบ proxy ตอบเป็นภาษาไทย กระชับ ตรงประเด็น"},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.3,
+        }).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "FindFreeAI-Brain/1.0",
+        }
         req = Request(PROXY_URL, data=payload, headers=headers, method="POST")
         with urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            provider = data.get("_proxy", {}).get("provider", "unknown")
-            add_brain_log(f"AI ตอบแล้ว (ผ่าน {provider})", "ok")
-            return content
+            if content:
+                provider = data.get("_proxy", {}).get("provider", "unknown")
+                add_brain_log(f"✅ AI ตอบแล้ว (ผ่าน {provider} — ฟรี!)", "ok")
+                return content
     except Exception as e:
-        add_brain_log(f"AI ตอบไม่ได้: {e}", "error")
-        return None
+        add_brain_log(f"Proxy ไม่ได้: {e}", "warn")
+
+    # 2) Fallback: เรียก Claude CLI
+    add_brain_log("Fallback → เรียก Claude Code CLI...", "info")
+    result = ask_claude_cli(prompt)
+    if result:
+        return result
+
+    add_brain_log("ทั้ง Proxy และ Claude CLI ตอบไม่ได้", "error")
+    return None
 
 
 def load_json(path):
@@ -278,33 +315,39 @@ def get_recommendations():
 
 # ==================== RUN ALL ====================
 
+def _safe_run(name, func):
+    """รัน function แบบปลอดภัย ไม่ให้ error ทำพังทั้งระบบ"""
+    try:
+        return func()
+    except Exception as e:
+        add_brain_log(f"❌ {name} error: {e}", "error")
+        return None
+
+
 def run_brain_full():
     """รันทุกอย่าง"""
     add_brain_log("=" * 40, "info")
     add_brain_log("🧠 Claude Brain เริ่มทำงาน!", "info")
+    add_brain_log("(ใช้ Proxy ฟรี ถ้าไม่ได้ fallback Claude CLI)", "info")
     add_brain_log("=" * 40, "info")
 
     results = {}
 
-    # 1. วิเคราะห์
     add_brain_log("", "info")
     add_brain_log("📊 ขั้นตอน 1/4 — วิเคราะห์ผลทดสอบ", "info")
-    results["analysis"] = analyze_test_results()
+    results["analysis"] = _safe_run("วิเคราะห์", analyze_test_results)
 
-    # 2. หา API ใหม่
     add_brain_log("", "info")
     add_brain_log("🔍 ขั้นตอน 2/4 — หา API ฟรีใหม่", "info")
-    results["new_apis"] = discover_new_apis()
+    results["new_apis"] = _safe_run("หา API ใหม่", discover_new_apis)
 
-    # 3. อัปเกรด skill
     add_brain_log("", "info")
     add_brain_log("🚀 ขั้นตอน 3/4 — อัปเกรด Skill", "info")
-    results["skill"] = upgrade_skill()
+    results["skill"] = _safe_run("อัปเกรด Skill", upgrade_skill)
 
-    # 4. สรุปรายงาน
     add_brain_log("", "info")
     add_brain_log("📋 ขั้นตอน 4/4 — สรุปรายงาน", "info")
-    results["report"] = generate_report()
+    results["report"] = _safe_run("รายงาน", generate_report)
 
     add_brain_log("", "info")
     add_brain_log("=" * 40, "info")

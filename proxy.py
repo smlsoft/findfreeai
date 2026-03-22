@@ -389,7 +389,7 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {provider['api_key']}",
-            "User-Agent": "FindFreeAI-Proxy/1.0",
+            "User-Agent": "Mozilla/5.0 FindFreeAI/1.0",
         }
 
         log.info(f"[{i+1}/{max_tries}] {provider['name']} → {model}")

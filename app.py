@@ -1513,8 +1513,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"scanning": is_scanning})
         elif self.path.startswith("/api/keys"):
             keys = load_api_keys()
-            safe = {k: (v[:8] + "..." if len(v) > 8 else "***") for k, v in keys.items()}
-            self._json({"keys": safe, "count": len(keys)})
+            # ส่ง key จริงกลับไปที่ฟอร์ม (ไม่ mask)
+            self._json({"keys": keys, "count": len(keys)})
         elif self.path.startswith("/api/brain/logs"):
             self._json(brain_live_logs[-100:])
         elif self.path.startswith("/api/brain/recommendations"):

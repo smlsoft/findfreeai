@@ -8,6 +8,7 @@ import json
 import time
 import re
 import os
+from claude_brain import run_brain_full, get_recommendations, brain_logs as brain_live_logs
 import sys
 import threading
 from datetime import datetime
@@ -758,6 +759,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   <div class="tab" onclick="switchTab('github')">🐙 GitHub</div>
   <div class="tab" onclick="switchTab('proxy')">🔌 AI Proxy</div>
   <div class="tab" onclick="switchTab('security')">🛡️ ความปลอดภัย</div>
+  <div class="tab" onclick="switchTab('brain')">🧠 AI วิเคราะห์</div>
   <div class="tab" onclick="switchTab('config')">🦞 OpenClaw Config</div>
 </div>
 <div class="container">
@@ -767,7 +769,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     <div class="start-section">
       <button class="start-btn" id="startBtn" onclick="startScan()">🔍 เริ่มค้นหา AI API ฟรี</button>
       <button class="start-btn" id="testKeysBtn" onclick="testKeys()" style="margin-left:16px;background:linear-gradient(135deg, var(--green), #1a7f37);font-size:18px;padding:14px 36px;">🔑 ทดสอบ API Key</button>
-      <div class="start-desc" id="startDesc">กดปุ่มซ้ายเพื่อสแกนหา AI ฟรี | กดปุ่มขวาเพื่อทดสอบ Key ที่สมัครมาว่าใช้ได้จริงหรือไม่</div>
+      <button class="start-btn" id="brainBtn" onclick="runBrain()" style="margin-left:16px;background:linear-gradient(135deg, #bc8cff, #8250df);font-size:18px;padding:14px 36px;">🧠 AI วิเคราะห์</button>
+      <div class="start-desc" id="startDesc">🔍 ค้นหา AI ฟรี | 🔑 ทดสอบ Key | 🧠 ให้ AI วิเคราะห์ แนะนำ หา API ใหม่ อัปเกรด Skill</div>
     </div>
     <div class="stats-bar" id="statsBar">
       <div class="stat-card"><div class="label">API ที่รู้จัก</div><div class="value" style="color:var(--accent)" id="sKnown">-</div></div>
@@ -859,13 +862,13 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         </div>
 
         <div style="margin:20px 0;padding:20px;background:var(--bg3);border-radius:12px;border-left:4px solid var(--accent)">
-          <strong style="font-size:18px;color:var(--accent)">ขั้นตอนที่ 2: ใส่ API Key ในไฟล์ .env</strong>
-          <p style="margin-top:8px;font-size:14px;color:var(--text2)">Copy <code>.env.example</code> เป็น <code>.env</code> แล้วใส่ key ที่สมัครมา (อย่างน้อย 1 ตัว)</p>
+          <strong style="font-size:18px;color:var(--accent)">ขั้นตอนที่ 2: ใส่ API Key ในไฟล์ api_keys.json</strong>
+          <p style="margin-top:8px;font-size:14px;color:var(--text2)">แก้ไข <code>api_keys.json</code> แล้วใส่ key ที่สมัครมา (อย่างน้อย 1 ตัว)</p>
         </div>
 
         <div style="margin:20px 0;padding:20px;background:var(--bg3);border-radius:12px;border-left:4px solid var(--purple)">
           <strong style="font-size:18px;color:var(--purple)">ขั้นตอนที่ 3: ตั้งค่า OpenClaw</strong>
-<pre id="proxyConfig"># ตั้งค่าใน OpenClaw (.env หรือ config)
+<pre id="proxyConfig"># ตั้งค่าใน OpenClaw
 OPENAI_API_BASE=http://127.0.0.1:8900/v1
 OPENAI_API_KEY=any-key-here
 MODEL_NAME=auto</pre>
@@ -897,7 +900,7 @@ MODEL_NAME=auto</pre>
           <li><strong style="color:var(--red)">HTTP ไม่เข้ารหัส</strong> — API ที่ไม่ใช่ HTTPS ข้อมูลอาจถูกดักฟัง</li>
           <li><strong style="color:var(--red)">โดเมนน่าสงสัย</strong> — .tk, .ml, .ga, .cf, .onion มักเป็นของหลอกลวง</li>
           <li><strong style="color:var(--red)">Link ย่อ</strong> — bit.ly, tinyurl อาจนำไปสู่ malware</li>
-          <li><strong style="color:var(--yellow)">API Key รั่วไหล</strong> — อย่าใส่ key ในโค้ด! ใช้ .env เท่านั้น</li>
+          <li><strong style="color:var(--yellow)">API Key รั่วไหล</strong> — อย่าใส่ key ในโค้ด! ใช้ api_keys.json เท่านั้น</li>
           <li><strong style="color:var(--yellow)">Rate Limit</strong> — ใช้เยอะเกินอาจโดนแบน</li>
         </ul>
       </div>
@@ -918,13 +921,39 @@ MODEL_NAME=auto</pre>
         <h3>🔒 วิธีป้องกันตัวเอง</h3>
         <ul style="font-size:15px;color:var(--text2);line-height:2;margin-top:10px">
           <li>✅ ใช้เฉพาะ API จาก provider ที่เชื่อถือได้ (Groq, Google, OpenRouter, ฯลฯ)</li>
-          <li>✅ เก็บ API Key ในไฟล์ <code>.env</code> อย่าใส่ในโค้ดโดยตรง</li>
-          <li>✅ เพิ่ม <code>.env</code> ในไฟล์ <code>.gitignore</code></li>
+          <li>✅ เก็บ API Key ในไฟล์ <code>api_keys.json</code> อย่าใส่ในโค้ดโดยตรง</li>
+          <li>✅ เพิ่ม <code>api_keys.json</code> ในไฟล์ <code>.gitignore</code></li>
           <li>✅ ใช้ Proxy ของเรา — มีระบบตรวจสอบความปลอดภัยอัตโนมัติ</li>
           <li>✅ ตรวจสอบ API ที่ค้นพบใหม่ก่อนใช้งานเสมอ</li>
           <li>❌ อย่าใช้ API จากลิงก์ในแชท Discord/Telegram ที่ไม่รู้จัก</li>
           <li>❌ อย่าใส่ข้อมูลส่วนตัว/ลับในข้อความที่ส่งไป API ฟรี</li>
         </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- BRAIN TAB -->
+  <div class="tab-content" id="tab-brain">
+    <div class="section">
+      <div class="config-guide" style="border-left:4px solid var(--purple);">
+        <h3 style="color:var(--purple);font-size:22px;">🧠 AI วิเคราะห์ (ใช้ AI ฟรีผ่าน Proxy ของเรา)</h3>
+        <p style="font-size:16px;color:var(--text2);">กดปุ่ม "🧠 AI วิเคราะห์" บนหน้าแรก แล้ว AI จะ:</p>
+        <ul style="font-size:15px;color:var(--text2);line-height:2;margin-top:10px">
+          <li>📊 วิเคราะห์ผลทดสอบ — provider ไหนดีที่สุด มีปัญหาอะไร</li>
+          <li>🔍 หา AI API ฟรีใหม่ — แนะนำ provider ที่ยังไม่มีในระบบ</li>
+          <li>🚀 อัปเกรด Skill — ปรับ routing ให้ฉลาดขึ้นจากข้อมูลจริง</li>
+          <li>📋 สรุปรายงาน — สถานะรวม + สิ่งที่ควรทำต่อ</li>
+        </ul>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title" style="font-size:20px;">📋 คำแนะนำจาก AI</div>
+      <div id="brainResults"><div class="empty">กดปุ่ม "🧠 AI วิเคราะห์" เพื่อเริ่ม</div></div>
+    </div>
+    <div class="section">
+      <div class="section-title">📋 Brain Log</div>
+      <div class="log-viewer" id="brainLog" style="max-height:300px;overflow-y:auto;">
+        <div class="log-entry"><span class="log-info">รอคำสั่ง...</span></div>
       </div>
     </div>
   </div>
@@ -940,7 +969,7 @@ MODEL_NAME=auto</pre>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:20px 0;">
           <div style="padding:16px;background:var(--bg3);border-radius:10px;text-align:center;">
             <div style="font-size:28px;margin-bottom:8px;">1️⃣</div>
-            <strong style="font-size:15px;">ใส่ API Key ใน .env</strong>
+            <strong style="font-size:15px;">ใส่ API Key ใน api_keys.json</strong>
             <p style="font-size:13px;color:var(--text3);margin-top:4px;">สมัครฟรี แล้วใส่ key อย่างน้อย 1 ตัว</p>
           </div>
           <div style="padding:16px;background:var(--bg3);border-radius:10px;text-align:center;">
@@ -1028,10 +1057,20 @@ async function startScan() {
   pollData();
 }
 
+async function runBrain() {
+  const btn = document.getElementById('brainBtn');
+  btn.disabled = true; btn.textContent = '⏳ AI กำลังวิเคราะห์...'; btn.classList.add('scanning');
+  document.getElementById('startDesc').textContent = 'AI กำลังวิเคราะห์... ดูผลในแท็บ 🧠 AI วิเคราะห์';
+  try { await fetch('/api/brain', {method:'POST'}); } catch(e) {}
+  btn.disabled = false; btn.textContent = '🧠 AI วิเคราะห์'; btn.classList.remove('scanning');
+  document.getElementById('startDesc').textContent = 'วิเคราะห์เสร็จแล้ว! ดูผลในแท็บ 🧠 AI วิเคราะห์';
+  pollBrain();
+}
+
 async function testKeys() {
   const btn = document.getElementById('testKeysBtn');
   btn.disabled = true; btn.textContent = '⏳ กำลังทดสอบ Key...'; btn.classList.add('scanning');
-  document.getElementById('startDesc').textContent = 'กำลังทดสอบ API Key ที่มีในไฟล์ .env... ดู log ด้านล่าง';
+  document.getElementById('startDesc').textContent = 'กำลังทดสอบ API Key ที่มีใน api_keys.json... ดู log ด้านล่าง';
   try { await fetch('/api/test-keys', {method:'POST'}); } catch(e) {}
   btn.disabled = false; btn.textContent = '🔑 ทดสอบ API Key'; btn.classList.remove('scanning');
   document.getElementById('startDesc').textContent = 'ทดสอบ Key เสร็จแล้ว! ดูผลในตาราง';
@@ -1197,15 +1236,49 @@ function renderAll(d) {
         <td style="font-family:monospace;font-size:12px">${esc(base)}</td>
         <td><span class="tag">${esc(model)}</span></td>
         <td>${esc(item.free_tier||'-')}</td>
-        <td><button class="copy-btn" onclick="navigator.clipboard.writeText(\`${env.replace(/`/g,'')}\`).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy .env',2000)})">Copy .env</button></td>
+        <td><button class="copy-btn" onclick="navigator.clipboard.writeText(\`${env.replace(/`/g,'')}\`).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy Config',2000)})">Copy Config</button></td>
       </tr>`;
     }).join('');
   }
 }
 
+async function pollBrain() {
+  try {
+    const [logsR, recsR] = await Promise.all([
+      fetch('/api/brain/logs?'+Date.now()),
+      fetch('/api/brain/recommendations?'+Date.now()),
+    ]);
+    if(logsR.ok) {
+      const logs = await logsR.json();
+      const lv = document.getElementById('brainLog');
+      if(logs.length && lv) {
+        lv.innerHTML = logs.map(l =>
+          `<div class="log-entry"><span class="log-time">[${esc(l.time)}]</span> <span class="log-${l.level}">${esc(l.msg)}</span></div>`
+        ).join('');
+      }
+    }
+    if(recsR.ok) {
+      const recs = await recsR.json();
+      const el = document.getElementById('brainResults');
+      if(el && recs.items && recs.items.length) {
+        el.innerHTML = recs.items.slice().reverse().map(r => {
+          const icons = {analysis:'📊',new_apis:'🔍',skill_upgrade:'🚀',report:'📋'};
+          const titles = {analysis:'วิเคราะห์ผลทดสอบ',new_apis:'API ฟรีใหม่',skill_upgrade:'อัปเกรด Skill',report:'รายงานสรุป'};
+          return `<div class="social-card" style="margin-bottom:12px;">
+            <div style="font-size:16px;font-weight:600;color:var(--accent);margin-bottom:8px;">${icons[r.category]||'📌'} ${titles[r.category]||r.category}</div>
+            <pre style="white-space:pre-wrap;font-size:14px;color:var(--text2);line-height:1.8;margin:0;font-family:inherit;">${esc(r.content)}</pre>
+            <div style="font-size:12px;color:var(--text3);margin-top:8px;">${r.created_at?new Date(r.created_at).toLocaleString('th-TH'):''}</div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch(e) {}
+}
+
 // Poll every 2 seconds
 setInterval(pollLogs, 2000);
 setInterval(pollData, 5000);
+setInterval(pollBrain, 3000);
 pollData();
 </script>
 </body>
@@ -1361,6 +1434,10 @@ class Handler(BaseHTTPRequestHandler):
             keys = load_api_keys()
             safe = {k: (v[:8] + "..." if len(v) > 8 else "***") for k, v in keys.items()}
             self._json({"keys": safe, "count": len(keys)})
+        elif self.path.startswith("/api/brain/logs"):
+            self._json(brain_live_logs[-100:])
+        elif self.path.startswith("/api/brain/recommendations"):
+            self._json(get_recommendations())
         else:
             self.send_error(404)
 
@@ -1382,6 +1459,16 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 results = test_all_keys()
                 self._json({"status": "done", "results": results})
+            finally:
+                is_scanning = False
+        elif self.path == "/api/brain":
+            if is_scanning:
+                self._json({"status": "busy"})
+                return
+            is_scanning = True
+            try:
+                results = run_brain_full()
+                self._json({"status": "done", "results": {k: (v[:200] if isinstance(v, str) else str(v)[:200]) for k, v in (results or {}).items()}})
             finally:
                 is_scanning = False
         elif self.path == "/api/keys":

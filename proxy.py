@@ -419,11 +419,11 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
         ) for m in messages
     )
 
-    # RAG ปิดชั่วคราว — ทดสอบว่า AI ตอบตรงขึ้นไหม
+    # RAG ปิดถาวร — client (OpenClaw) ส่ง messages history มาเอง
+    # ความจำยาวจัดการที่ client ไม่ใช่ proxy
+    # ถ้าจะเปิดใหม่: uncomment 2 บรรทัดข้างล่าง
     # if session_id != "default" and not _has_image_in_msg:
     #     data["messages"] = get_context_for_request(session_id, messages)
-    # if last_user_msg:
-    #     append_message(session_id, "user", last_user_msg)
 
     query_type = detect_query_type(last_user_msg) if last_user_msg else "chat"
     data["stream"] = True
@@ -641,11 +641,9 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
         ) for m in messages
     )
 
-    # RAG ปิดชั่วคราว — ทดสอบว่า AI ตอบตรงขึ้นไหม
+    # RAG ปิดถาวร — client (OpenClaw) ส่ง messages history มาเอง
     # if session_id != "default" and not _has_image_in_msg:
     #     data["messages"] = get_context_for_request(session_id, messages)
-    # if last_user_msg:
-    #     append_message(session_id, "user", last_user_msg)
 
     query_type = detect_query_type(last_user_msg) if last_user_msg else "chat"
 

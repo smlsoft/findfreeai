@@ -793,13 +793,10 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 
     <!-- ฟอร์มใส่ API Key -->
     <div class="section">
-      <div class="section-title" style="font-size:20px;">🔑 ใส่ API Key ที่สมัครมา (แก้ไขได้ทันที)</div>
+      <div class="section-title" style="font-size:20px;">🔑 ใส่ API Key ที่สมัครมา</div>
       <div class="config-guide" style="border-left:4px solid var(--green);">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">ใส่ key → กดทดสอบ → ผ่านแล้วบันทึกอัตโนมัติ</p>
         <div id="keyForm"></div>
-        <div style="margin-top:16px;display:flex;gap:12px;">
-          <button class="start-btn" onclick="saveKeys()" style="font-size:16px;padding:12px 28px;background:var(--green);">💾 บันทึก API Keys</button>
-          <span id="keySaveStatus" style="font-size:15px;color:var(--text2);line-height:48px;"></span>
-        </div>
       </div>
     </div>
 
@@ -1120,19 +1117,11 @@ async function loadKeyForm() {
         </div>
         <input type="text" id="key_${p.env}" placeholder="${esc(p.hint)}"
           value="${has ? existing[p.env] : ''}"
-          oninput="autoSaveKeys()"
           style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:monospace;font-size:13px;margin-top:6px;">
         <div id="test_${p.env}" style="font-size:13px;margin-top:4px;min-height:20px;"></div>
       </div>`;
     }).join('') + '</div>';
 }
-let _saveTimer = null;
-function autoSaveKeys() {
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(saveKeys, 1500);
-  document.getElementById('keySaveStatus').textContent = '⏳ กำลังบันทึก...';
-}
-
 async function testOneKey(envName, providerName) {
   const el = document.getElementById('test_'+envName);
   const btn = document.getElementById('tbtn_'+envName);
@@ -1140,31 +1129,24 @@ async function testOneKey(envName, providerName) {
   if(!key) { el.innerHTML='<span style="color:var(--red)">❌ ไม่มี key — กรุณาใส่ key แล้วกดทดสอบ</span>'; return; }
   el.innerHTML='<span style="color:var(--yellow)">⏳ กำลังทดสอบ '+esc(providerName)+'...</span>';
   if(btn) { btn.disabled=true; btn.textContent='⏳'; }
-  await saveKeys();
+  // ส่ง key ไปทดสอบที่ backend — ถ้าผ่านจะ save ให้อัตโนมัติ
+  const hasAsterisk = key.includes('*');
   try {
-    const r = await fetch('/api/test-one-key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({env_name:envName})});
+    const body = hasAsterisk ? {env_name:envName} : {env_name:envName, key:key};
+    const r = await fetch('/api/test-one-key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     const d = await r.json();
-    if(d.status==='ok') el.innerHTML=`<span style="color:var(--green);font-weight:600;">✅ ผ่าน! ใช้ได้จริง (${d.latency_ms||'?'}ms)</span>`;
-    else if(d.status==='rate_limited') el.innerHTML='<span style="color:var(--yellow);font-weight:600;">⚠️ Key ใช้ได้ แต่ถึง rate limit แล้ว — รอสักครู่แล้วลองใหม่</span>';
-    else el.innerHTML=`<span style="color:var(--red);font-weight:600;">❌ ไม่ผ่าน: ${esc(d.message||'Key ไม่ถูกต้อง')}</span>`;
+    if(d.status==='ok') {
+      el.innerHTML=`<span style="color:var(--green);font-weight:600;">✅ ผ่าน! บันทึกแล้ว (${d.latency_ms||'?'}ms)</span>`;
+      loadKeyForm();
+    } else if(d.status==='rate_limited') {
+      el.innerHTML='<span style="color:var(--yellow);font-weight:600;">⚠️ Key ใช้ได้ แต่ถึง rate limit (บันทึกแล้ว)</span>';
+      loadKeyForm();
+    } else {
+      el.innerHTML=`<span style="color:var(--red);font-weight:600;">❌ ไม่ผ่าน — ไม่บันทึก: ${esc(d.message||'Key ไม่ถูกต้อง')}</span>` +
+        `<button onclick="loadKeyForm()" style="margin-left:8px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;">↩ ใช้ค่าเดิม</button>`;
+    }
   } catch(e) { el.innerHTML='<span style="color:var(--red)">❌ เชื่อมต่อไม่ได้</span>'; }
   if(btn) { btn.disabled=false; btn.textContent='ทดสอบ'; }
-}
-
-async function saveKeys() {
-  const keys = {};
-  KEY_PROVIDERS.forEach(p => {
-    const v = document.getElementById('key_'+p.env)?.value?.trim();
-    if(v) keys[p.env] = v;
-  });
-  try {
-    await fetch('/api/keys', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(keys)});
-    document.getElementById('keySaveStatus').textContent = '✅ บันทึกแล้ว!';
-    setTimeout(()=>document.getElementById('keySaveStatus').textContent='', 3000);
-    loadKeyForm();
-  } catch(e) {
-    document.getElementById('keySaveStatus').textContent = '❌ บันทึกไม่สำเร็จ';
-  }
 }
 loadKeyForm();
 

@@ -160,42 +160,90 @@
 
 <!-- Proxy Log -->
 <div>
-	<h2 class="text-lg font-semibold mb-3">📡 Proxy Log (Real-time)</h2>
-	<div class="rounded-xl border overflow-hidden" style="background: var(--bg2); border-color: var(--border);">
-		<table class="w-full text-sm">
-			<thead>
-				<tr style="background: var(--bg3);">
-					<th class="text-left px-4 py-2 text-xs" style="color: var(--text2);">เวลา</th>
-					<th class="text-left px-4 py-2 text-xs" style="color: var(--text2);">Provider</th>
-					<th class="text-left px-4 py-2 text-xs" style="color: var(--text2);">Model</th>
-					<th class="text-left px-4 py-2 text-xs" style="color: var(--text2);">สถานะ</th>
-					<th class="text-left px-4 py-2 text-xs" style="color: var(--text2);">ความเร็ว</th>
-					<th class="text-left px-4 py-2 text-xs" style="color: var(--text2);">ทำไมเลือก</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each proxyLogs.slice().reverse().slice(0, 30) as log}
-					<tr class="border-t" style="border-color: var(--border);">
-						<td class="px-4 py-2 font-mono text-xs" style="color: var(--text3);">{log.time}</td>
-						<td class="px-4 py-2 font-semibold">{log.provider}</td>
-						<td class="px-4 py-2"><span class="px-2 py-0.5 rounded text-xs" style="background: var(--bg3); color: var(--text2);">{log.model || '-'}</span></td>
-						<td class="px-4 py-2">
-							{#if log.status === 'ok'}
-								<span class="px-2 py-0.5 rounded text-xs font-bold" style="background: rgba(63,185,80,0.15); color: var(--green);">✅</span>
-							{:else}
-								<span class="px-2 py-0.5 rounded text-xs font-bold" style="background: rgba(248,81,73,0.15); color: var(--red);">❌ {log.error || ''}</span>
-							{/if}
-						</td>
-						<td class="px-4 py-2 font-mono text-xs">{log.latency_ms}ms</td>
-						<td class="px-4 py-2 text-xs" style="color: var(--text2); max-width: 250px;">{log.reason || ''}</td>
-					</tr>
-				{:else}
-					<tr><td colspan="6" class="px-4 py-8 text-center" style="color: var(--text2);">รอ request แรก...</td></tr>
-				{/each}
-			</tbody>
-		</table>
+	<div class="flex items-center gap-3 mb-3">
+		<h2 class="text-lg font-semibold">📡 Proxy Log</h2>
+		<span class="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full" style="background: rgba(63,185,80,0.1); color: var(--green);">
+			<span class="w-2 h-2 rounded-full animate-pulse" style="background: var(--green);"></span>
+			Real-time
+		</span>
+		<span class="text-xs" style="color: var(--text3);">{proxyLogs.length} requests</span>
+	</div>
+	<div class="space-y-2">
+		{#each proxyLogs.slice().reverse().slice(0, 20) as log, i}
+			{@const isNew = i === 0}
+			{@const latPct = Math.min(100, (log.latency_ms || 0) / 20)}
+			{@const latColor = (log.latency_ms || 0) < 500 ? 'var(--green)' : (log.latency_ms || 0) < 1500 ? 'var(--yellow)' : 'var(--red)'}
+			<div
+				class="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-500"
+				style="background: var(--bg2); border-color: {log.status === 'ok' ? 'var(--border)' : 'var(--red)'};
+					opacity: {1 - i * 0.03};
+					{isNew ? 'animation: slideIn 0.5s ease-out, glow 1s ease-out;' : ''}"
+			>
+				<!-- Status dot -->
+				<div class="flex-shrink-0">
+					{#if log.status === 'ok'}
+						<div class="w-3 h-3 rounded-full" style="background: var(--green); {isNew ? 'animation: ping 1s ease-out;' : ''}"></div>
+					{:else}
+						<div class="w-3 h-3 rounded-full" style="background: var(--red);"></div>
+					{/if}
+				</div>
+
+				<!-- Time -->
+				<span class="font-mono text-xs w-24 flex-shrink-0" style="color: var(--text3);">{log.time}</span>
+
+				<!-- Provider -->
+				<span class="font-bold text-sm w-24 flex-shrink-0">{log.provider}</span>
+
+				<!-- Model -->
+				<span class="text-xs px-2 py-0.5 rounded flex-shrink-0" style="background: var(--bg3); color: var(--text2);">
+					{(log.model || '-').split('/').pop()}
+				</span>
+
+				<!-- Latency bar -->
+				<div class="flex-1 flex items-center gap-2 min-w-0">
+					<div class="flex-1 h-2 rounded-full overflow-hidden" style="background: var(--bg3);">
+						<div class="h-full rounded-full transition-all duration-700"
+							style="width: {latPct}%; background: {latColor}; {isNew ? 'animation: barGrow 0.8s ease-out;' : ''}">
+						</div>
+					</div>
+					<span class="font-mono text-xs font-bold flex-shrink-0 w-16 text-right" style="color: {latColor};">
+						{log.latency_ms}ms
+					</span>
+				</div>
+
+				<!-- Reason -->
+				<span class="text-xs flex-shrink-0 max-w-40 truncate" style="color: var(--text3);" title={log.reason || ''}>
+					{log.reason || ''}
+				</span>
+			</div>
+		{:else}
+			<div class="text-center py-12 rounded-xl border" style="background: var(--bg2); border-color: var(--border); color: var(--text2);">
+				<div class="text-4xl mb-2">📡</div>
+				<p>รอ request แรก...</p>
+				<p class="text-xs mt-1" style="color: var(--text3);">ลอง Chat หรือ ทดสอบ API Key ดู</p>
+			</div>
+		{/each}
 	</div>
 </div>
+
+<style>
+	@keyframes slideIn {
+		from { transform: translateX(-20px); opacity: 0; }
+		to { transform: translateX(0); opacity: 1; }
+	}
+	@keyframes glow {
+		0% { box-shadow: 0 0 10px rgba(63,185,80,0.4); }
+		100% { box-shadow: none; }
+	}
+	@keyframes ping {
+		0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(63,185,80,0.7); }
+		70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(63,185,80,0); }
+		100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(63,185,80,0); }
+	}
+	@keyframes barGrow {
+		from { width: 0%; }
+	}
+</style>
 
 {:else if activeTab === 'keys'}
 	{#await import('./keys/+page.svelte') then { default: C }}<C />{/await}

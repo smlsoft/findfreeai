@@ -62,17 +62,42 @@ export default function ProxyPage() {
   return (
     <>
       <div className="space-y-6">
-        {/* OpenClaw Config */}
-        <Card className="border-[var(--clr-green)] border-l-4">
-          <CardContent className="p-5">
-            <h3 className="text-lg font-bold mb-3 text-[var(--clr-green)]">🔌 ตั้งค่า OpenClaw / แอปอื่น</h3>
-            <pre className="p-4 rounded-lg text-sm font-mono bg-secondary">{`OPENAI_API_BASE=https://airouter.satistang.com/v1\nOPENAI_API_KEY=any\nMODEL_NAME=auto`}</pre>
-            <Button className="mt-3" size="sm"
-              onClick={() => navigator.clipboard.writeText("OPENAI_API_BASE=https://airouter.satistang.com/v1\nOPENAI_API_KEY=any\nMODEL_NAME=auto")}>
-              📋 Copy
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Connection Guide */}
+        <div>
+          <h3 className="text-lg font-bold mb-3">🔌 วิธีเชื่อมต่อ Proxy</h3>
+          <p className="text-sm text-muted-foreground mb-4">ใช้ได้กับทุกแอปที่รองรับ OpenAI API — แค่เปลี่ยน Base URL</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { title: "🦞 OpenClaw", lang: "env", code: `OPENAI_API_BASE=https://airouter.satistang.com/v1\nOPENAI_API_KEY=any\nMODEL_NAME=auto` },
+              { title: "🐍 Python (OpenAI SDK)", lang: "python", code: `from openai import OpenAI\n\nclient = OpenAI(\n    base_url="https://airouter.satistang.com/v1",\n    api_key="any"\n)\n\nres = client.chat.completions.create(\n    model="auto",\n    messages=[{"role": "user", "content": "สวัสดี"}]\n)\nprint(res.choices[0].message.content)` },
+              { title: "🟢 Node.js", lang: "javascript", code: `import OpenAI from "openai";\n\nconst client = new OpenAI({\n  baseURL: "https://airouter.satistang.com/v1",\n  apiKey: "any"\n});\n\nconst res = await client.chat.completions.create({\n  model: "auto",\n  messages: [{ role: "user", content: "สวัสดี" }]\n});\nconsole.log(res.choices[0].message.content);` },
+              { title: "📟 cURL", lang: "bash", code: `curl -X POST https://airouter.satistang.com/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer any" \\\n  -d '{\n    "model": "auto",\n    "messages": [{"role": "user", "content": "สวัสดี"}]\n  }'` },
+            ].map(ex => (
+              <Card key={ex.title} className="border-[var(--clr-green)]/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-sm">{ex.title}</span>
+                    <Button variant="outline" size="sm" className="text-xs h-6"
+                      onClick={() => navigator.clipboard.writeText(ex.code)}>
+                      📋 Copy
+                    </Button>
+                  </div>
+                  <pre className="p-3 rounded-lg text-xs font-mono bg-secondary overflow-x-auto whitespace-pre-wrap">{ex.code}</pre>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Card className="mt-4 bg-secondary/30">
+            <CardContent className="p-4">
+              <h4 className="font-bold text-sm mb-2">💡 Model Format</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs font-mono">
+                <div><span className="text-[var(--clr-green)] font-bold">auto</span> → เลือก provider ดีที่สุดอัตโนมัติ</div>
+                <div><span className="text-[var(--clr-accent)] font-bold">groq/llama-3.3-70b-versatile</span> → เจาะจง provider + model</div>
+                <div><span className="text-[var(--clr-purple)] font-bold">llama-3.3-70b-versatile</span> → หา provider ที่มี model นี้</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Cost Tracking */}
         <div>

@@ -209,22 +209,11 @@
 
 </main>
 
-<!-- Right: OpenClaw Chat (always visible) -->
+{#if chatOpen}
+<!-- Right: Chat Panel -->
 <aside class="border-l flex flex-col" style="width: 420px; border-color: var(--border); background: var(--bg2);">
-	<div class="flex items-center justify-between px-3 py-2 border-b" style="border-color: var(--border); background: var(--bg3);">
-		<span class="font-bold text-sm">🦞 OpenClaw Chat</span>
-		<div class="flex items-center gap-2">
-			<button onclick={() => chatOpen = !chatOpen}
-				class="px-2 py-0.5 rounded text-xs cursor-pointer border"
-				style="border-color: var(--border); color: var(--text2); background: var(--bg);">
-				{chatOpen ? '◀ ซ่อน' : '▶ แสดง'}
-			</button>
-			<a href="http://127.0.0.1:18789" target="_blank" class="text-xs" style="color: var(--accent);">↗</a>
-		</div>
-	</div>
-	{#if chatOpen}
-		<iframe src="http://127.0.0.1:18789" class="flex-1 w-full border-0" title="OpenClaw"></iframe>
-	{/if}
+	{#await import('./chat/+page.svelte') then { default: Chat }}<Chat />{/await}
 </aside>
+{/if}
 
 </div>

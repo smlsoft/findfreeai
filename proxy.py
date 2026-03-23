@@ -353,31 +353,32 @@ def resolve_provider_model(model_str):
             total_req = db.get("total_requests", 0)
             explore = (total_req % 10 == 0)  # ทุก 10 requests = explore mode
 
-            if explore:
-                # Explore: สุ่มเลือก provider+model ที่ยังไม่มี data มาก
+            if explore and total_req > 20:
+                # Explore: สุ่มเลือก model ที่ยังไม่มี data — เฉพาะ provider ที่เร็ว
                 import random
+                # เฉพาะ provider ที่ไม่ใช่ OpenRouter (ช้า) และไม่ cooldown
+                fast_providers = [p for p in providers if p["id"] not in ("openrouter",)]
+                if not fast_providers:
+                    fast_providers = providers
                 all_models = []
-                for p in providers:
+                for p in fast_providers:
                     for m in p.get("models", {}).keys():
                         full_id = f"{p['id']}/{m}"
                         model_data = db.get("models", {}).get(full_id, {})
                         calls = model_data.get("ok", 0) + model_data.get("fail", 0)
                         all_models.append((p, m, full_id, calls))
-                # เรียงตาม calls น้อยสุด (ยังไม่เคยลอง)
                 all_models.sort(key=lambda x: x[3])
                 if all_models:
-                    least_tested = [m for m in all_models if m[3] < 5]  # ยังทดสอบไม่ถึง 5 ครั้ง
+                    least_tested = [m for m in all_models if m[3] < 5]
                     if least_tested:
-                        chosen = random.choice(least_tested[:5])
-                    else:
-                        chosen = random.choice(all_models[:3])
-                    p, model_name, full_id, calls = chosen
-                    log.info(f"  🔬 Explore mode: {full_id} (calls={calls}) — เก็บ data model ใหม่")
-                    result = [(p, model_name)]
-                    for p2 in providers:
-                        if p2["id"] != p["id"]:
-                            result.append((p2, p2["default_model"]))
-                    return result
+                        chosen = random.choice(least_tested[:3])
+                        p, model_name, full_id, calls = chosen
+                        log.info(f"  🔬 Explore: {full_id} (calls={calls})")
+                        result = [(p, model_name)]
+                        for p2 in providers:
+                            if p2["id"] != p["id"]:
+                                result.append((p2, p2["default_model"]))
+                        return result
 
             # ปกติ: เลือก model ที่ score ดีที่สุด
             scores = get_scores()

@@ -1136,10 +1136,10 @@ async function testOneKey(envName, providerName) {
     const r = await fetch('/api/test-one-key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     const d = await r.json();
     if(d.status==='ok') {
-      el.innerHTML=`<span style="color:var(--green);font-weight:600;">✅ ผ่าน! บันทึกแล้ว (${d.latency_ms||'?'}ms)</span>`;
+      el.innerHTML=`<span style="color:var(--green);font-weight:600;">✅ ผ่าน! (${d.latency_ms||'?'}ms)</span>`;
       loadKeyForm();
     } else if(d.status==='rate_limited') {
-      el.innerHTML='<span style="color:var(--yellow);font-weight:600;">⚠️ Key ใช้ได้ แต่ถึง rate limit (บันทึกแล้ว)</span>';
+      el.innerHTML='<span style="color:var(--yellow);font-weight:600;">⚠️ Key ใช้ได้ แต่ถึง rate limit</span>';
       loadKeyForm();
     } else {
       el.innerHTML=`<span style="color:var(--red);font-weight:600;">❌ ไม่ผ่าน — ไม่บันทึก: ${esc(d.message||'Key ไม่ถูกต้อง')}</span>` +

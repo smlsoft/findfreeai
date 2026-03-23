@@ -584,19 +584,33 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
                         chunk = json.loads(decoded[6:])
                         delta = chunk.get("choices", [{}])[0].get("delta", {})
 
-                        # เพิ่ม role ทุก chunk (OpenRouter style)
+                        # เพิ่ม role ทุก chunk
                         if "role" not in delta:
                             delta["role"] = "assistant"
 
-                        # ลบ fields ที่ OpenClaw อาจ parse ไม่ได้
-                        for key in ["logprobs", "x_groq", "system_fingerprint"]:
-                            chunk.pop(key, None)
-                        chunk["choices"][0].pop("logprobs", None)
+                        # Normalize: ถ้า content ว่าง + มี reasoning → ใช้ reasoning เป็น content
+                        if not delta.get("content") and delta.get("reasoning"):
+                            delta["content"] = delta["reasoning"]
 
-                        # Collect content for RAG
+                        # ลบ fields ที่ OpenClaw อาจ parse ไม่ได้
+                        for key in ["logprobs", "x_groq", "system_fingerprint", "reasoning", "reasoning_details", "reasoning_content"]:
+                            delta.pop(key, None)
+                            chunk.pop(key, None)
+                        choice = chunk.get("choices", [{}])[0]
+                        choice.pop("logprobs", None)
+                        choice.pop("native_finish_reason", None)
+                        # ลบ fields ระดับ chunk
+                        for key in ["provider", "service_tier", "nvext", "usage_breakdown"]:
+                            chunk.pop(key, None)
+
+                        # Collect content
                         content = delta.get("content", "")
                         if content:
                             full_content += content
+
+                        # ข้าม chunk ที่ไม่มี content (: OPENROUTER PROCESSING)
+                        if not content and not choice.get("finish_reason"):
+                            continue
 
                         # เขียน chunk ที่ normalize แล้ว
                         normalized = f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
@@ -606,6 +620,12 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
                     except Exception:
                         pass
 
+                # ข้าม DONE จาก upstream — เราส่ง DONE เองหลัง metadata
+                if decoded.strip() == "data: [DONE]":
+                    continue
+                # ข้าม comment lines (: OPENROUTER PROCESSING)
+                if decoded.startswith(":"):
+                    continue
                 handler.wfile.write(line)
                 handler.wfile.flush()
 

@@ -78,30 +78,71 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Providers */}
+        {/* Providers — sorted by score */}
         <div>
           <h2 className="text-lg font-semibold mb-3">📡 Providers</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {providers.map(p => (
-              <Card key={p.id} className={p.has_key ? "border-[var(--clr-green)]" : ""}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold">{p.name}</span>
-                    {p.has_key ? (
-                      <Badge variant="outline" className="text-[var(--clr-green)] border-[var(--clr-green)]/30 bg-[var(--clr-green)]/10">✅ Key</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[var(--clr-red)] border-[var(--clr-red)]/30 bg-[var(--clr-red)]/10">❌ ไม่มี</Badge>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Models: {p.models?.length || 0}</div>
-                  {(p.stats?.success > 0 || p.stats?.fail > 0) && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      ✅ {p.stats.success} | ❌ {p.stats.fail} | ⚡ {p.stats.avg_latency}ms
+            {[...providers].sort((a, b) => {
+              // คำนวณ score: has_key, success rate, latency, cooldown
+              const score = (p: Provider & { cooldown?: { remaining: number } | null }) => {
+                if (!p.has_key) return -1000;
+                const total = p.stats.success + p.stats.fail;
+                const successRate = total > 0 ? p.stats.success / total : 0.5;
+                const latencyScore = p.stats.avg_latency > 0 ? Math.max(0, 100 - p.stats.avg_latency / 100) : 50;
+                const cooldownPenalty = p.cooldown ? -200 : 0;
+                return (successRate * 100) + latencyScore + (p.stats.success * 5) + cooldownPenalty + p.priority;
+              };
+              return score(b as Provider & { cooldown?: { remaining: number } | null }) - score(a as Provider & { cooldown?: { remaining: number } | null });
+            }).map((p, rank) => {
+              const total = p.stats.success + p.stats.fail;
+              const successRate = total > 0 ? Math.round((p.stats.success / total) * 100) : null;
+              const cd = (p as Provider & { cooldown?: { remaining: number; until: string } | null }).cooldown;
+              const isCooled = !!cd;
+
+              return (
+                <Card key={p.id} className={
+                  isCooled ? "border-[var(--clr-yellow)] opacity-60" :
+                  p.has_key && rank === 0 && total > 0 ? "border-[var(--clr-green)] ring-1 ring-[var(--clr-green)]/20" :
+                  p.has_key ? "border-[var(--clr-green)]" : ""
+                }>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {p.has_key && rank < 3 && total > 0 && (
+                          <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[var(--clr-green)]/15 text-[var(--clr-green)]">#{rank + 1}</span>
+                        )}
+                        <span className="font-semibold">{p.name}</span>
+                      </div>
+                      {isCooled ? (
+                        <Badge variant="outline" className="text-[var(--clr-yellow)] border-[var(--clr-yellow)]/30 bg-[var(--clr-yellow)]/10">❄️ {cd.remaining}s</Badge>
+                      ) : p.has_key ? (
+                        <Badge variant="outline" className="text-[var(--clr-green)] border-[var(--clr-green)]/30 bg-[var(--clr-green)]/10">✅ Key</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[var(--clr-red)] border-[var(--clr-red)]/30 bg-[var(--clr-red)]/10">❌ ไม่มี</Badge>
+                      )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="text-xs text-muted-foreground">Models: {p.models?.length || 0}</div>
+                    {total > 0 && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full rounded-full bg-[var(--clr-green)]"
+                            style={{ width: `${successRate}%` }} />
+                        </div>
+                        <span className={`text-xs font-mono font-bold ${
+                          (successRate || 0) >= 80 ? "text-[var(--clr-green)]" :
+                          (successRate || 0) >= 50 ? "text-[var(--clr-yellow)]" : "text-[var(--clr-red)]"
+                        }`}>{successRate}%</span>
+                      </div>
+                    )}
+                    {total > 0 && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        ✅ {p.stats.success} | ❌ {p.stats.fail} | ⚡ {p.stats.avg_latency}ms
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
 

@@ -13,7 +13,8 @@
 	let loading = $state(false);
 	let models = $state<any[]>([]);
 	let selectedModel = $state('auto');
-	let sessionId = 'chat-' + Date.now().toString(36);
+	let sessionId = (typeof localStorage !== 'undefined' && localStorage.getItem('chat-session-id')) || 'chat-' + Date.now().toString(36);
+	$effect(() => { if (typeof localStorage !== 'undefined') localStorage.setItem('chat-session-id', sessionId); });
 	let chatEl: HTMLDivElement;
 	let showSettings = $state(false);
 	let systemPrompt = $state('');
@@ -65,7 +66,11 @@
 	}
 
 	function onKey(e: KeyboardEvent) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }
-	function clear() { messages = []; sessionId = 'chat-' + Date.now().toString(36); }
+	function clear() {
+		messages = [];
+		sessionId = 'chat-' + Date.now().toString(36);
+		if (typeof localStorage !== 'undefined') localStorage.setItem('chat-session-id', sessionId);
+	}
 
 	function openOpenClaw() {
 		window.open('http://127.0.0.1:18790/chat?session=smlairouter-test', '_blank');

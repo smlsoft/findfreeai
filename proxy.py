@@ -155,7 +155,7 @@ def save_keys(keys):
 
 
 def get_available_providers():
-    """คืน providers ที่มี key เรียงตาม dynamic priority"""
+    """คืน providers ที่มี key เรียงตาม dynamic priority — ตัดตัวช้า/fail ออก"""
     keys = load_keys()
     available = []
     for pid, p in PROVIDERS.items():
@@ -164,10 +164,27 @@ def get_available_providers():
             continue
         s = get_stats(pid)
         dp = p["priority"]
+
+        # === Auto-disable: ตัดตัวที่ fail เยอะหรือช้ามาก ===
+        total = s["success"] + s["fail"]
+        if total >= 5:
+            fail_rate = s["fail"] / total
+            if fail_rate > 0.8:
+                log.info(f"  🚫 {pid}: ปิดชั่วคราว (fail {s['fail']}/{total} = {fail_rate:.0%})")
+                continue  # ข้ามไปเลย
+        if s["avg_latency"] > 8000 and s["success"] > 3:
+            log.info(f"  🐌 {pid}: ปิดชั่วคราว (avg {s['avg_latency']}ms > 8000ms)")
+            continue  # ช้าเกิน 8 วินาที ข้ามไป
+
+        # === Dynamic priority ===
         if s["fail"] > 5 and s["success"] == 0:
             dp -= 50
         elif s["avg_latency"] > 5000:
-            dp -= 20
+            dp -= 30
+        elif s["avg_latency"] > 3000:
+            dp -= 15
+        elif s["avg_latency"] > 0 and s["avg_latency"] < 500:
+            dp += 15  # เร็วมาก → priority สูงขึ้น
         elif s["avg_latency"] > 0 and s["avg_latency"] < 1000:
             dp += 10
         available.append({"id": pid, **p, "api_key": key, "dp": dp, "stats": s})
@@ -734,7 +751,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/v1/reload"):
             global PROVIDERS
             PROVIDERS = load_providers()
-            self._json(200, {"status": "ok", "providers": len(PROVIDERS)})
+            # Reset stats ทุก provider
+            stats.clear()
+            self._json(200, {"status": "ok", "providers": len(PROVIDERS), "stats": "reset"})
 
         elif self.path.startswith("/v1/rag/sessions"):
             self._json(200, {"sessions": list_sessions()})

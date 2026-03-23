@@ -292,7 +292,33 @@ def resolve_provider_model(model_str):
                 round_robin_idx = (round_robin_idx + 1) % len(providers)
                 p = providers[round_robin_idx]
                 return [(p, p["default_model"])]
-        # Auto mode: return all by priority
+        # Auto mode: เลือก model ที่ score ดีที่สุดจาก skill engine
+        try:
+            scores = get_scores()
+            model_ranking = scores.get("model_ranking", [])
+            if model_ranking:
+                # หา model ที่ score สูงสุดและ provider พร้อมใช้
+                provider_ids = {p["id"] for p in providers}
+                for ranked in model_ranking:
+                    rpid = ranked.get("provider", "")
+                    if rpid in provider_ids and ranked.get("score", 0) >= 40:
+                        # หา provider object
+                        for p in providers:
+                            if p["id"] == rpid:
+                                mid = ranked["id"]
+                                # ดึงชื่อ model จาก full id (provider/model → model)
+                                model_name = mid.split("/", 1)[1] if "/" in mid else mid
+                                log.info(f"  🎯 Auto-select: {mid} (score={ranked['score']} grade={ranked['grade']})")
+                                # ใส่ตัวนี้เป็นตัวแรก แล้วตามด้วย default ของตัวอื่น
+                                result = [(p, model_name)]
+                                for p2 in providers:
+                                    if p2["id"] != rpid:
+                                        result.append((p2, p2["default_model"]))
+                                return result
+        except Exception as e:
+            log.warning(f"  ⚠️ Score-based routing failed: {e}")
+
+        # Fallback: return all by priority with default model
         return [(p, p["default_model"]) for p in providers]
 
     # Check "provider/model" format

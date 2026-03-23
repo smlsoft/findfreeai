@@ -48,8 +48,8 @@ export default function KeysPage() {
     const r = await testOneKey(env, pendingKey);
     setTestResults(prev => ({ ...prev, [env]: r || { status: "error", message: "เชื่อมต่อไม่ได้" } }));
     // ถ้าผ่าน → backend save แล้ว → reload masked + clear editing
-    if (r && (r.status === "ok" || r.status === "rate_limited") && pendingKey) {
-      await reloadMasked();
+    if (r && (r.status === "ok" || r.status === "rate_limited")) {
+      if (pendingKey) await reloadMasked();
       setEditingKeys(prev => { const n = { ...prev }; delete n[env]; return n; });
     }
   };
@@ -137,7 +137,17 @@ export default function KeysPage() {
                     {isLimit && <span className="font-bold text-[var(--clr-yellow)]">⚠️ Key ใช้ได้ แต่ถึง rate limit (บันทึกแล้ว)</span>}
                     {isFail && (
                       <>
-                        <span className="font-bold text-[var(--clr-red)]">❌ ไม่ผ่าน — ไม่บันทึก</span>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[var(--clr-red)]">❌ ไม่ผ่าน — ไม่บันทึก</span>
+                          {maskedKeys[p.env] && (
+                            <Button variant="outline" size="sm" className="text-xs h-6" onClick={() => {
+                              setEditingKeys(prev => { const n = { ...prev }; delete n[p.env]; return n; });
+                              setTestResults(prev => { const n = { ...prev }; delete n[p.env]; return n; });
+                            }}>
+                              ↩ ใช้ค่าเดิม
+                            </Button>
+                          )}
+                        </div>
                         <div className="text-xs mt-1 text-muted-foreground">{r.message || "Key ไม่ถูกต้องหรือหมดอายุ"}</div>
                       </>
                     )}

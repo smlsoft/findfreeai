@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,34 @@ const tabs = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [chatOpen, setChatOpen] = useState(true);
+  const [chatWidth, setChatWidth] = useState(480);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startW = useRef(480);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    isDragging.current = true;
+    startX.current = e.clientX;
+    startW.current = chatWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      if (!isDragging.current) return;
+      const diff = startX.current - ev.clientX;
+      setChatWidth(Math.max(300, Math.min(800, startW.current + diff)));
+    };
+    const onUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [chatWidth]);
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as "dark" | "light" | null;
@@ -78,9 +105,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
         {chatOpen && (
-          <aside className="w-[420px] border-l bg-card flex flex-col shrink-0 max-lg:hidden">
-            <ChatPanel />
-          </aside>
+          <>
+            {/* Resize handle */}
+            <div onMouseDown={onMouseDown}
+              className="w-1.5 shrink-0 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors max-lg:hidden" />
+            <aside style={{ width: chatWidth }} className="border-l bg-card flex flex-col shrink-0 max-lg:hidden">
+              <ChatPanel />
+            </aside>
+          </>
         )}
       </div>
     </>

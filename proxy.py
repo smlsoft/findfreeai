@@ -575,6 +575,7 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             handler.end_headers()
 
             full_content = ""
+            stream_usage = {"prompt": 0, "completion": 0, "total": 0}
             for line in resp:
                 decoded = line.decode("utf-8", errors="replace")
 
@@ -603,10 +604,16 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
                         for key in ["provider", "service_tier", "nvext", "usage_breakdown"]:
                             chunk.pop(key, None)
 
-                        # Collect content
+                        # Collect content + usage
                         content = delta.get("content", "")
                         if content:
                             full_content += content
+                        # เก็บ usage จริงจาก chunk สุดท้าย (ถ้ามี)
+                        chunk_usage = chunk.get("usage")
+                        if chunk_usage:
+                            stream_usage["prompt"] = chunk_usage.get("prompt_tokens", 0)
+                            stream_usage["completion"] = chunk_usage.get("completion_tokens", 0)
+                            stream_usage["total"] = chunk_usage.get("total_tokens", 0)
 
                         # ข้าม chunk ที่ไม่มี content (: OPENROUTER PROCESSING)
                         if not content and not choice.get("finish_reason"):
@@ -634,18 +641,20 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             record_ok(pid, latency)
             record_call(pid, query_type, latency, True, model_id=model)
 
-            # Cost tracking
-            tokens_est = max(1, len(full_content) // 4)  # estimate output tokens
-            cost_info = track_request(pid, model, 0, tokens_est, latency, provider.get("api_key", "")[:8])
+            # Cost tracking — ใช้ usage จริงถ้ามี, ไม่มีก็ estimate
+            input_t = stream_usage["prompt"] or 0
+            output_t = stream_usage["completion"] or max(1, len(full_content) // 4)
+            total_t = stream_usage["total"] or (input_t + output_t)
+            cost_info = track_request(pid, model, input_t, output_t, latency, provider.get("api_key", "")[:8])
             cost_thb = round(cost_info.get("cost_usd", 0) * 35, 4)
 
             add_request_log(provider["name"], model, "ok", latency,
-                reason=f"Stream: {query_type} | {tokens_est} tokens | ฿{cost_thb}")
-            log.info(f"  ✅ STREAM {provider['name']} {latency}ms [{query_type}] {tokens_est}t ฿{cost_thb}")
+                reason=f"Stream: {query_type} | {total_t} tokens | {'ฟรี' if cost_thb == 0 else f'฿{cost_thb}'}")
+            log.info(f"  ✅ STREAM {provider['name']} {latency}ms [{query_type}] {total_t}t {'ฟรี' if cost_thb == 0 else f'฿{cost_thb}'}")
 
-            # ส่ง metadata chunk สุดท้าย — ให้ client รู้ว่าใช้ provider/model/cost อะไร
+            # ส่ง metadata chunk สุดท้าย
             cost_label = "ฟรี!" if cost_thb == 0 else f"฿{cost_thb}"
-            meta_content = f"\n\n---\n📡 {provider['name']} | {model} | {latency}ms | {tokens_est} tokens | {cost_label}"
+            meta_content = f"\n\n---\n📡 {provider['name']} | {model} | {latency}ms | {total_t} tokens | {cost_label}"
             meta_chunk = {
                 "choices": [{"index": 0, "delta": {"content": meta_content, "role": "assistant"}, "finish_reason": None}]
             }

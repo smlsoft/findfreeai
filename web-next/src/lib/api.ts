@@ -38,7 +38,8 @@ export const postVirtualKey = (body: Record<string, unknown>) => postJSON(`${PRO
 // Dashboard APIs
 export const getKeys = () => fetchJSON<{ keys: Record<string, string>; count: number }>(`${API}/keys`);
 export const saveKeys = (keys: Record<string, string>) => postJSON(`${API}/keys`, keys);
-export const testOneKey = (env_name: string) => postJSON<KeyTestResult>(`${API}/test-one-key`, { env_name });
+export const testOneKey = (env_name: string, key?: string) =>
+  postJSON<KeyTestResult>(`${API}/test-one-key`, { env_name, ...(key ? { key } : {}) });
 export const startScan = () => postJSON(`${API}/scan`);
 export const startTestKeys = () => postJSON(`${API}/test-keys`);
 export const startBrain = () => postJSON(`${API}/brain`);

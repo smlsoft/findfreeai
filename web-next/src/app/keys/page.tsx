@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { getKeys, saveKeys, testOneKey } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { getKeys, testOneKey } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,43 +22,41 @@ const PROVIDERS = [
 ];
 
 export default function KeysPage() {
-  const [keys, setKeys] = useState<Record<string, string>>({});
+  // masked keys จาก backend (แสดงผลเท่านั้น)
+  const [maskedKeys, setMaskedKeys] = useState<Record<string, string>>({});
+  // key ที่ user กำลังพิมพ์ (ยังไม่ save — รอทดสอบผ่านก่อน)
+  const [editingKeys, setEditingKeys] = useState<Record<string, string>>({});
   const [testResults, setTestResults] = useState<Record<string, { status: string; message?: string; latency_ms?: number }>>({});
-  const [saveStatus, setSaveStatus] = useState("");
   const [showKey, setShowKey] = useState("");
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    getKeys().then(d => { if (d) setKeys(d.keys); });
-  }, []);
+  const reloadMasked = () => getKeys().then(d => { if (d) setMaskedKeys(d.keys); });
+  useEffect(() => { reloadMasked(); }, []);
+
+  const displayValue = (env: string) => editingKeys[env] ?? maskedKeys[env] ?? "";
+  const providerHasKey = (env: string) => !!(editingKeys[env]?.trim() || maskedKeys[env]?.trim());
 
   const onInput = (env: string, val: string) => {
-    setKeys(prev => ({ ...prev, [env]: val }));
-    clearTimeout(saveTimer.current);
-    setSaveStatus("saving");
-    saveTimer.current = setTimeout(async () => {
-      const clean: Record<string, string> = {};
-      for (const [k, v] of Object.entries({ ...keys, [env]: val })) {
-        if (v?.trim()) clean[k] = v.trim();
-      }
-      await saveKeys(clean);
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus(""), 3000);
-    }, 1500);
+    setEditingKeys(prev => ({ ...prev, [env]: val }));
+    // ยังไม่ save — รอกดทดสอบแล้วผ่านก่อน
   };
 
   const doTest = async (env: string) => {
     setTestResults(prev => ({ ...prev, [env]: { status: "testing" } }));
-    const clean: Record<string, string> = {};
-    for (const [k, v] of Object.entries(keys)) { if (v?.trim()) clean[k] = v.trim(); }
-    await saveKeys(clean);
-    const r = await testOneKey(env);
+    // ส่ง key ไปทดสอบที่ backend — ถ้าเป็น key ใหม่ก็ส่งไปด้วย
+    // backend จะ save ให้เฉพาะเมื่อทดสอบผ่าน
+    const pendingKey = editingKeys[env]?.trim() || "";
+    const r = await testOneKey(env, pendingKey);
     setTestResults(prev => ({ ...prev, [env]: r || { status: "error", message: "เชื่อมต่อไม่ได้" } }));
+    // ถ้าผ่าน → backend save แล้ว → reload masked + clear editing
+    if (r && (r.status === "ok" || r.status === "rate_limited") && pendingKey) {
+      await reloadMasked();
+      setEditingKeys(prev => { const n = { ...prev }; delete n[env]; return n; });
+    }
   };
 
   const testAll = async () => {
     for (const p of PROVIDERS) {
-      if (keys[p.env]?.trim()) await doTest(p.env);
+      if (providerHasKey(p.env)) await doTest(p.env);
     }
   };
 
@@ -67,18 +65,17 @@ export default function KeysPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold">🔑 จัดการ API Keys</h2>
-          <p className="text-sm mt-1 text-muted-foreground">ใส่ key → auto-save | กดทดสอบเพื่อเช็คว่าใช้ได้จริง</p>
+          <p className="text-sm mt-1 text-muted-foreground">ใส่ key → กดทดสอบ → ผ่านแล้วบันทึกอัตโนมัติ</p>
         </div>
         <div className="flex items-center gap-3">
-          {saveStatus === "saving" && <span className="text-sm text-[var(--clr-yellow)]">⏳ กำลังบันทึก...</span>}
-          {saveStatus === "saved" && <span className="text-sm text-[var(--clr-green)]">✅ บันทึกแล้ว!</span>}
           <Button onClick={testAll}>🧪 ทดสอบทั้งหมด</Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {PROVIDERS.map(p => {
-          const hasKey = !!keys[p.env]?.trim();
+          const has = providerHasKey(p.env);
+          const isEditing = editingKeys[p.env] !== undefined;
           const r = testResults[p.env];
           const isOk = r?.status === "ok";
           const isLimit = r?.status === "rate_limited";
@@ -88,7 +85,7 @@ export default function KeysPage() {
           const borderColor = isOk ? "border-[var(--clr-green)]"
             : isLimit ? "border-[var(--clr-yellow)]"
             : isFail ? "border-[var(--clr-red)]"
-            : hasKey ? "border-[var(--clr-accent)]" : "";
+            : has ? "border-[var(--clr-accent)]" : "";
 
           return (
             <Card key={p.env} className={borderColor}>
@@ -96,11 +93,11 @@ export default function KeysPage() {
                 isOk ? "bg-[var(--clr-green)]/5" : isFail ? "bg-[var(--clr-red)]/5" : "bg-secondary/50"
               }`}>
                 <div className="flex items-center gap-2">
-                  <span className="text-lg">{isTesting ? "⏳" : isOk ? "✅" : isLimit ? "⚠️" : isFail ? "❌" : hasKey ? "🔑" : "⬜"}</span>
+                  <span className="text-lg">{isTesting ? "⏳" : isOk ? "✅" : isLimit ? "⚠️" : isFail ? "❌" : has ? "🔑" : "⬜"}</span>
                   <span className="font-bold">{p.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" disabled={isTesting || !hasKey} onClick={() => doTest(p.env)} className="text-xs h-7">
+                  <Button size="sm" disabled={isTesting || !has} onClick={() => doTest(p.env)} className="text-xs h-7">
                     {isTesting ? "⏳" : "🧪 ทดสอบ"}
                   </Button>
                   <a href={p.url} target="_blank" rel="noreferrer">
@@ -114,7 +111,8 @@ export default function KeysPage() {
                   <span className="text-xs text-muted-foreground">{p.desc}</span>
                 </div>
                 <div className="relative">
-                  <Input type={showKey === p.env ? "text" : "password"} placeholder={p.hint} value={keys[p.env] || ""}
+                  <Input type={showKey === p.env ? "text" : "password"} placeholder={p.hint}
+                    value={displayValue(p.env)}
                     onChange={e => onInput(p.env, e.target.value)}
                     className="font-mono text-sm pr-10" />
                   <button type="button" onClick={() => setShowKey(showKey === p.env ? "" : p.env)}
@@ -122,6 +120,9 @@ export default function KeysPage() {
                     {showKey === p.env ? "🙈" : "👁"}
                   </button>
                 </div>
+                {isEditing && !r && (
+                  <p className="text-xs mt-2 text-muted-foreground">💡 กดทดสอบเพื่อตรวจสอบและบันทึก key</p>
+                )}
                 {r && (
                   <div className={`mt-3 px-3 py-2 rounded-lg text-sm ${
                     isOk ? "bg-[var(--clr-green)]/10" : isLimit ? "bg-[var(--clr-yellow)]/10" : isTesting ? "bg-[var(--clr-accent)]/10" : "bg-[var(--clr-red)]/10"
@@ -129,14 +130,14 @@ export default function KeysPage() {
                     {isTesting && <span className="text-[var(--clr-accent)]">⏳ กำลังทดสอบ {p.name}...</span>}
                     {isOk && (
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-[var(--clr-green)]">✅ ผ่าน! ใช้ได้จริง</span>
+                        <span className="font-bold text-[var(--clr-green)]">✅ ผ่าน! บันทึกแล้ว</span>
                         {r.latency_ms && <Badge variant="outline" className="text-[var(--clr-green)] text-xs">{r.latency_ms}ms</Badge>}
                       </div>
                     )}
-                    {isLimit && <span className="font-bold text-[var(--clr-yellow)]">⚠️ Key ใช้ได้ แต่ถึง rate limit</span>}
+                    {isLimit && <span className="font-bold text-[var(--clr-yellow)]">⚠️ Key ใช้ได้ แต่ถึง rate limit (บันทึกแล้ว)</span>}
                     {isFail && (
                       <>
-                        <span className="font-bold text-[var(--clr-red)]">❌ ไม่ผ่าน</span>
+                        <span className="font-bold text-[var(--clr-red)]">❌ ไม่ผ่าน — ไม่บันทึก</span>
                         <div className="text-xs mt-1 text-muted-foreground">{r.message || "Key ไม่ถูกต้องหรือหมดอายุ"}</div>
                       </>
                     )}

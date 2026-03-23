@@ -35,20 +35,34 @@ export default function DashboardPage() {
 
   const [dashLogs, setDashLogs] = useState<DashLog[]>([]);
   const [activeAction, setActiveAction] = useState<string>("");
+  const [logVisible, setLogVisible] = useState(false);
+  const prevLogLen = useRef(0);
 
-  // Poll dash logs เมื่อ scanning
+  // Poll dash logs เมื่อ active action
   useEffect(() => {
-    if (!scanning) { setDashLogs([]); setActiveAction(""); return; }
+    if (!activeAction) return;
+    setLogVisible(true);
     const id = setInterval(async () => {
-      const logs = await getDashLogs();
-      if (logs) setDashLogs(logs as DashLog[]);
-    }, 1000);
+      const [logs, st] = await Promise.all([getDashLogs(), getStatus()]);
+      if (logs) {
+        const newLogs = logs as DashLog[];
+        setDashLogs(newLogs);
+        // auto-detect เสร็จ: status=false + log ไม่เพิ่มแล้ว
+        if (st && !(st as { scanning: boolean }).scanning) {
+          if (newLogs.length === prevLogLen.current) {
+            setScanning(false);
+            setActiveAction("");
+          }
+        }
+        prevLogLen.current = newLogs.length;
+      }
+    }, 1500);
     return () => clearInterval(id);
-  }, [scanning]);
+  }, [activeAction]);
 
-  const doScan = () => { setScanning(true); setActiveAction("scan"); startScan(); };
-  const doTestKeys = () => { setScanning(true); setActiveAction("keys"); startTestKeys(); };
-  const doBrain = () => { setScanning(true); setActiveAction("brain"); startBrain(); };
+  const doScan = () => { setScanning(true); setActiveAction("scan"); setDashLogs([]); startScan(); };
+  const doTestKeys = () => { setScanning(true); setActiveAction("keys"); setDashLogs([]); startTestKeys(); };
+  const doBrain = () => { setScanning(true); setActiveAction("brain"); setDashLogs([]); startBrain(); };
 
   const bestPerType = (skills as { best_per_type?: Record<string, string> }).best_per_type || {};
   const totalRequests = (skills as { total_requests?: number }).total_requests || 0;
@@ -80,26 +94,40 @@ export default function DashboardPage() {
         </div>
 
         {/* Live Action Log */}
-        {scanning && dashLogs.length > 0 && (
-          <Card className="bg-[#0a0e14]">
+        {logVisible && dashLogs.length > 0 && (
+          <Card className="bg-[#0a0e14] relative">
             <CardContent className="p-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="w-2 h-2 rounded-full bg-[var(--clr-green)] animate-pulse" />
-                <span className="text-xs font-bold text-[var(--clr-green)]">
-                  {activeAction === "scan" ? "🔍 กำลังค้นหา..." : activeAction === "keys" ? "🔑 กำลังทดสอบ..." : "🧠 กำลังวิเคราะห์..."}
+                {scanning ? (
+                  <span className="w-2 h-2 rounded-full bg-[var(--clr-green)] animate-pulse" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-[var(--clr-accent)]" />
+                )}
+                <span className={`text-xs font-bold ${scanning ? "text-[var(--clr-green)]" : "text-[var(--clr-accent)]"}`}>
+                  {scanning
+                    ? (activeAction === "scan" ? "🔍 กำลังค้นหา..." : activeAction === "keys" ? "🔑 กำลังทดสอบ..." : "🧠 กำลังวิเคราะห์...")
+                    : "✅ เสร็จแล้ว!"
+                  }
                 </span>
                 <span className="text-[10px] text-muted-foreground ml-auto">{dashLogs.length} logs</span>
+                {!scanning && (
+                  <button onClick={() => setLogVisible(false)} className="text-xs text-muted-foreground hover:text-foreground cursor-pointer ml-1">✕</button>
+                )}
               </div>
-              <div className="font-mono text-[11px] leading-relaxed max-h-32 overflow-y-auto space-y-0.5">
-                {dashLogs.slice(-10).map((l, i) => (
-                  <div key={i} className={
-                    l.level === "ok" ? "text-[var(--clr-green)]" :
-                    l.level === "error" ? "text-[var(--clr-red)]" :
-                    l.level === "warn" ? "text-[var(--clr-yellow)]" : "text-muted-foreground"
-                  }>
-                    <span className="text-muted-foreground/50">[{l.time}]</span> {l.msg}
-                  </div>
-                ))}
+              <div className="text-xs leading-relaxed max-h-48 overflow-y-auto space-y-1" ref={el => { if (el && scanning) el.scrollTop = el.scrollHeight; }}>
+                {dashLogs.slice(-20).map((l, i) => {
+                  const icon = l.level === "ok" ? "✅" : l.level === "error" ? "❌" : l.level === "warn" ? "⚠️" : "📋";
+                  const color = l.level === "ok" ? "text-[var(--clr-green)]"
+                    : l.level === "error" ? "text-[var(--clr-red)]"
+                    : l.level === "warn" ? "text-[var(--clr-yellow)]" : "text-muted-foreground";
+                  return (
+                    <div key={i} className={`${color} flex gap-2`}>
+                      <span className="shrink-0">{icon}</span>
+                      <span className="text-muted-foreground/60 shrink-0 font-mono text-[10px]">{l.time}</span>
+                      <span>{l.msg}</span>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

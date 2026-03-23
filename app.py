@@ -1635,8 +1635,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 data = json.loads(body)
                 env_name = data.get("env_name", "")
-                keys = load_api_keys()
-                key = keys.get(env_name, "")
+                # รับ key จาก request (key ใหม่ที่ user พิมพ์) หรือใช้ key เดิมจาก file
+                new_key = data.get("key", "")
+                existing_keys = load_api_keys()
+                key = new_key if new_key else existing_keys.get(env_name, "")
                 if not key:
                     self._json({"status": "no_key", "message": "ไม่มี key"})
                     return
@@ -1650,6 +1652,11 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"status": "error", "message": "ไม่พบ provider"})
                     return
                 result = test_api_key(src["name"], src["api_base"], key, src["models"][0])
+                # ถ้าผ่าน (ok หรือ rate_limited) → save key ให้เลย
+                if new_key and result.get("status") in ("ok", "rate_limited"):
+                    existing_keys[env_name] = new_key
+                    save_api_keys(existing_keys)
+                    add_log(f"🔑 บันทึก {env_name} แล้ว (ทดสอบผ่าน)", "ok")
                 self._json(result)
             except Exception as e:
                 self._json({"status": "error", "message": str(e)})
@@ -1660,7 +1667,10 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 new_keys = json.loads(body)
                 existing = load_api_keys()
-                existing.update(new_keys)
+                # ไม่บันทึกค่าที่ถูก mask (มี * อยู่) ทับ key จริง
+                for k, v in new_keys.items():
+                    if v and "*" not in v:
+                        existing[k] = v
                 existing = {k: v for k, v in existing.items() if v}
                 save_api_keys(existing)
                 add_log(f"🔑 บันทึก API Keys แล้ว ({len(existing)} keys)", "ok")

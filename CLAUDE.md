@@ -1,11 +1,11 @@
-# FindFreeAI — Claude Code CLI Skill
+# SML AI Router — Claude Code CLI Skill
 
 ## โปรเจคนี้คืออะไร
 ระบบค้นหา ทดสอบ และจัดการ AI API ฟรี + Proxy สำหรับ OpenClaw (น้องกุ้ง)
 ให้ OpenClaw ใช้ AI ฟรีตลอดไป ไม่ต้อง config ใหม่เรื่อยๆ
 
 ## GitHub
-https://github.com/smlsoft/findfreeai
+https://github.com/smlsoft/smlairouter
 
 ## สถาปัตยกรรม
 ```
@@ -39,7 +39,7 @@ python app.py           # Dashboard บน Host (ใช้ Claude CLI)
 
 ## OpenClaw ตั้งค่า
 ```
-OPENAI_API_BASE=http://findfreeai-proxy:8900/v1
+OPENAI_API_BASE=http://smlairouter-proxy:8900/v1
 OPENAI_API_KEY=any
 MODEL_NAME=auto
 ```
@@ -57,7 +57,7 @@ MODEL_NAME=auto
 - ทดสอบก่อน deploy (รัน python app.py แล้วเช็ค)
 - Windows ต้อง reconfigure stdout เป็น utf-8
 - เตือน user เรื่อง malware / API น่าสงสัยเสมอ
-- Push ไป https://github.com/smlsoft/findfreeai เท่านั้น
+- Push ไป https://github.com/smlsoft/smlairouter เท่านั้น
 
 ## Proxy Model Format
 ```

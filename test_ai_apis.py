@@ -49,7 +49,7 @@ def test_openai_compatible(api_base: str, model: str, api_key: str = "") -> dict
 
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "FindFreeAI/1.0",
+        "User-Agent": "SML AI Router/1.0",
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -99,7 +99,7 @@ def test_openai_compatible(api_base: str, model: str, api_key: str = "") -> dict
 def test_models_endpoint(api_base: str, api_key: str = "") -> dict:
     """ทดสอบ /models endpoint"""
     url = api_base.rstrip("/") + "/models"
-    headers = {"User-Agent": "FindFreeAI/1.0"}
+    headers = {"User-Agent": "SML AI Router/1.0"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
@@ -306,7 +306,7 @@ def run_tests(cycle: int):
 
 
 def main():
-    log.info("🧪 FindFreeAI — API Tester")
+    log.info("🧪 SML AI Router — API Tester")
     log.info(f"⏰ Test interval: ทุก {TEST_INTERVAL} วินาที")
 
     cycle = 1

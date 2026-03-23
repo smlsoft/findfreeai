@@ -68,7 +68,7 @@
 	function clear() { messages = []; sessionId = 'chat-' + Date.now().toString(36); }
 
 	function openOpenClaw() {
-		window.open('http://127.0.0.1:18790/chat?session=findfreeai-test', '_blank');
+		window.open('http://127.0.0.1:18790/chat?session=smlairouter-test', '_blank');
 	}
 
 	async function saveSystemPrompt() {
@@ -167,7 +167,7 @@
 		<div class="flex items-center justify-center h-full text-center">
 			<div>
 				<div class="text-5xl mb-3">🦞</div>
-				<p class="text-sm font-bold mb-1" style="color: var(--text);">FindFreeAI Chat</p>
+				<p class="text-sm font-bold mb-1" style="color: var(--text);">SML AI Router Chat</p>
 				<p class="text-xs" style="color: var(--text2);">AI ตอบผ่าน Proxy ฟรี<br>เลือก model หรือใช้ auto</p>
 				<div class="flex flex-wrap gap-1.5 mt-3 justify-center">
 					{#each ['สวัสดี', 'เล่าเรื่องตลก', 'เขียน Python'] as q}

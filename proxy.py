@@ -1,5 +1,5 @@
 """
-FindFreeAI Proxy — OpenRouter-style AI Gateway
+SML AI Router — OpenRouter-style AI Gateway
 OpenAI-compatible proxy ที่ทำงานเหมือน OpenRouter:
 - Unified API: ส่ง request มาที่เดียว route ไปหลาย provider
 - Model routing: เลือก model แบบ provider/model (เช่น groq/llama-3.3-70b)
@@ -22,7 +22,7 @@ from urllib.error import URLError, HTTPError
 from summarizer import detect_query_type
 from skill_engine import record_call, get_best_providers_for_type, classify_error, get_skill_summary, recompute_routing
 from rag_memory import get_session_id_from_request, get_context_for_request, append_message, list_sessions, get_or_create_session, delete_session, cleanup_old_sessions
-# semantic_cache ยกเลิกแล้ว
+
 from cost_tracker import track_request, get_cost_summary, reset_tracking
 from virtual_keys import validate_key, record_usage, list_keys as list_vkeys, create_key, delete_key, toggle_key
 
@@ -371,7 +371,7 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {provider['api_key']}",
-            "User-Agent": "Mozilla/5.0 FindFreeAI/1.0",
+            "User-Agent": "Mozilla/5.0 SMLAIRouter/2.0",
         }
 
         log.info(f"[STREAM {i+1}/{max_tries}] {provider['name']} → {model}")
@@ -548,7 +548,7 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {provider['api_key']}",
-            "User-Agent": "Mozilla/5.0 FindFreeAI/1.0",
+            "User-Agent": "Mozilla/5.0 SMLAIRouter/2.0",
         }
 
         log.info(f"[{i+1}/{max_tries}] {provider['name']} → {model}")
@@ -657,7 +657,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/":
             self._json(200, {
-                "name": "FindFreeAI Proxy",
+                "name": "SML AI Router",
                 "version": "2.0",
                 "description": "OpenRouter-style AI Gateway — ใช้เหมือน OpenAI API",
                 "endpoints": {
@@ -824,7 +824,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         models.insert(0, {
             "id": "auto",
             "object": "model",
-            "owned_by": "FindFreeAI Proxy",
+            "owned_by": "SML AI Router",
             "description": "อัตโนมัติ — เลือก provider ที่ดีที่สุด",
         })
         self._json(200, {"object": "list", "data": models})
@@ -878,7 +878,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 def create_env_example():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env.example")
     if not os.path.exists(path):
-        lines = ["# FindFreeAI Proxy — API Keys", "# สมัครฟรีทุกที่! ดูวิธีที่ http://127.0.0.1:8899", ""]
+        lines = ["# SML AI Router — API Keys", "# สมัครฟรีทุกที่! ดูวิธีที่ http://127.0.0.1:8899", ""]
         for pid, p in PROVIDERS.items():
             lines.append(f"# {p['name']}")
             lines.append(f"{p['env_key']}=")
@@ -892,7 +892,7 @@ def main():
     load_config()
 
     providers = get_available_providers()
-    print(f"🔌 FindFreeAI Proxy v2.0")
+    print(f"🔌 SML AI Router v2.0")
     print(f"📍 http://{PROXY_HOST}:{PROXY_PORT}/v1")
     print(f"")
     print(f"📋 Endpoints:")

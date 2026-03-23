@@ -1,5 +1,5 @@
 """
-FindFreeAI — แอปเดียวจบ
+SML AI Router — แอปเดียวจบ
 เปิด dashboard > กดปุ่มค้นหา > เห็น log ละเอียด > ผลทดสอบ + คะแนน + วิธีสมัคร
 by Claude Code CLI x Jead / BC AI Cloud
 """
@@ -185,7 +185,7 @@ KNOWN_SOURCES = [
 # ==================== HELPER ====================
 def fetch_url(url, headers=None):
     try:
-        hdr = {"User-Agent": "Mozilla/5.0 FindFreeAI/1.0"}
+        hdr = {"User-Agent": "Mozilla/5.0 SML AI Router/1.0"}
         if headers:
             hdr.update(headers)
         req = Request(url, headers=hdr)
@@ -200,7 +200,7 @@ def check_endpoint_alive(api_base):
         test_url = api_base.rstrip("/")
         if "/v1" in test_url:
             test_url += "/models"
-        req = Request(test_url, headers={"User-Agent": "FindFreeAI/1.0"})
+        req = Request(test_url, headers={"User-Agent": "SML AI Router/1.0"})
         with urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
             return resp.status < 500
     except HTTPError as e:
@@ -216,7 +216,7 @@ def test_chat(api_base, model, api_key=""):
         "messages": [{"role": "user", "content": "Say hello in Thai. Reply in one short sentence."}],
         "max_tokens": 100,
     }).encode("utf-8")
-    headers = {"Content-Type": "application/json", "User-Agent": "FindFreeAI/1.0"}
+    headers = {"Content-Type": "application/json", "User-Agent": "SML AI Router/1.0"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     start = time.time()
@@ -237,7 +237,7 @@ def test_chat(api_base, model, api_key=""):
 
 def test_models_endpoint(api_base, api_key=""):
     url = api_base.rstrip("/") + "/models"
-    headers = {"User-Agent": "FindFreeAI/1.0"}
+    headers = {"User-Agent": "SML AI Router/1.0"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     try:
@@ -571,7 +571,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FindFreeAI — แดชบอร์ดหา AI ฟรี</title>
+<title>SML AI Router — แดชบอร์ดหา AI ฟรี</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -745,7 +745,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
-  <h1>🔍 <span>FindFreeAI</span></h1>
+  <h1>🔍 <span>SML AI Router</span></h1>
   <div class="header-right">
     <span style="font-size:14px;color:var(--text2)" id="lastUpdated"></span>
     <div class="theme-toggle" onclick="toggleTheme()" title="สลับธีม มืด/สว่าง"></div>
@@ -875,7 +875,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   <div class="tab-content" id="tab-proxy">
     <div class="section">
       <div class="config-guide">
-        <h3>🔌 FindFreeAI Proxy — ให้ OpenClaw เรียก AI ผ่าน Proxy</h3>
+        <h3>🔌 SML AI Router Proxy — ให้ OpenClaw เรียก AI ผ่าน Proxy</h3>
         <p style="font-size:16px;color:var(--text2)">Proxy จะเลือก AI API ฟรีที่ดีที่สุดให้อัตโนมัติ ถ้าตัวไหนช้า/ล่ม จะสลับไปตัวอื่นทันที!</p>
 
         <div style="margin:20px 0;padding:20px;background:var(--bg3);border-radius:12px;border-left:4px solid var(--green)">
@@ -986,7 +986,7 @@ MODEL_NAME=auto</pre>
     <!-- แบบ 1: ใช้ Proxy (แนะนำ) -->
     <div class="section">
       <div class="config-guide" style="border-left:4px solid var(--green);">
-        <h3 style="color:var(--green);font-size:22px;">🌟 แนะนำ: ใช้ FindFreeAI Proxy (ง่ายที่สุด!)</h3>
+        <h3 style="color:var(--green);font-size:22px;">🌟 แนะนำ: ใช้ SML AI Router Proxy (ง่ายที่สุด!)</h3>
         <p style="font-size:16px;color:var(--text2);margin:12px 0;">ตั้งค่าครั้งเดียว ไม่ต้องเปลี่ยนอีก — Proxy จะเลือก AI ที่ดีที่สุดให้อัตโนมัติ</p>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:20px 0;">
@@ -1461,7 +1461,7 @@ def test_api_key(provider_name, api_base, api_key, model):
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
-        "User-Agent": "Mozilla/5.0 FindFreeAI/1.0",
+        "User-Agent": "Mozilla/5.0 SML AI Router/1.0",
     }
     start = time.time()
     try:
@@ -1694,7 +1694,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     server = HTTPServer((HOST, PORT), Handler)
-    print(f"🖥️  FindFreeAI Dashboard")
+    print(f"🖥️  SML AI Router Dashboard")
     print(f"📍 http://{HOST}:{PORT}")
     print(f"🌙 Dark/Light theme toggle")
     print(f"⏹️  Ctrl+C เพื่อหยุด")

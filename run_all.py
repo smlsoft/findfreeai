@@ -1,5 +1,5 @@
 """
-FindFreeAI — Run All
+SML AI Router — Run All
 รัน 3 ส่วนพร้อมกัน:
 1. ค้นหา AI API ฟรี (find_free_ai.py)
 2. ทดสอบ API จริง (test_ai_apis.py)
@@ -21,7 +21,7 @@ if sys.stdout.encoding != "utf-8":
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def main():
-    print("🚀 FindFreeAI — Starting All Services")
+    print("🚀 SML AI Router — Starting All Services")
     print("=" * 50)
 
     procs = []

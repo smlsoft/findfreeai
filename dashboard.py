@@ -1,5 +1,5 @@
 """
-FindFreeAI Dashboard — Web dashboard ดู AI API ฟรี
+SML AI Router Dashboard — Web dashboard ดู AI API ฟรี
 Dark/Light theme + Test Results + OpenClaw Config Guide
 """
 
@@ -22,7 +22,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FindFreeAI — แดชบอร์ดหา AI ฟรี</title>
+<title>SML AI Router — แดชบอร์ดหา AI ฟรี</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -269,7 +269,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <body>
 
 <div class="header">
-  <h1>🔍 <span>FindFreeAI</span> Dashboard</h1>
+  <h1>🔍 <span>SML AI Router</span> Dashboard</h1>
   <div class="header-right">
     <span class="last-updated" id="lastUpdated">Loading...</span>
     <span class="refresh-dot" title="Auto-refresh ทุก 15 วินาที"></span>
@@ -863,7 +863,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 def main():
     server = HTTPServer((HOST, PORT), DashboardHandler)
-    print(f"🖥️  FindFreeAI Dashboard")
+    print(f"🖥️  SML AI Router Dashboard")
     print(f"📍 http://{HOST}:{PORT}")
     print(f"🌙 Dark/Light theme toggle มุมขวาบน")
     print(f"🔄 Auto-refresh ทุก 15 วินาที")

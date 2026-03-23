@@ -202,7 +202,7 @@ def generate_report():
     add_brain_log("📋 สรุปรายงาน...", "info")
     summary = _get_system_summary()
 
-    prompt = f"""สรุปสถานะระบบ FindFreeAI Proxy:
+    prompt = f"""สรุปสถานะระบบ SML AI Router Proxy:
 
 {summary}
 

@@ -34,7 +34,7 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
-log = logging.getLogger("FindFreeAI")
+log = logging.getLogger("SML AI Router")
 
 # ==================== KNOWN FREE AI SOURCES ====================
 # แหล่งที่รู้แล้วว่ามี free tier / free API
@@ -221,7 +221,7 @@ SOCIAL_SEARCH_URLS = [
 def fetch_url(url: str, headers: dict | None = None) -> str | None:
     """Fetch URL content safely"""
     try:
-        hdr = {"User-Agent": "Mozilla/5.0 FindFreeAI/1.0"}
+        hdr = {"User-Agent": "Mozilla/5.0 SML AI Router/1.0"}
         if headers:
             hdr.update(headers)
         req = Request(url, headers=hdr)
@@ -239,7 +239,7 @@ def check_endpoint_alive(api_base: str) -> bool:
         test_url = api_base.rstrip("/")
         if "/v1" in test_url:
             test_url += "/models"
-        req = Request(test_url, headers={"User-Agent": "FindFreeAI/1.0"})
+        req = Request(test_url, headers={"User-Agent": "SML AI Router/1.0"})
         with urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
             return resp.status < 500
     except HTTPError as e:
@@ -386,7 +386,7 @@ def run_scan_cycle(cycle: int):
 
 
 def main():
-    log.info("🚀 FindFreeAI — เริ่มค้นหา AI API ฟรี!")
+    log.info("🚀 SML AI Router — เริ่มค้นหา AI API ฟรี!")
     log.info(f"⏰ Interval: ทุก {CHECK_INTERVAL} วินาที")
     log.info(f"📁 Log: {LOG_FILE} | Data: {JSON_FILE}")
 

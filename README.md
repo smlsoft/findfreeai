@@ -1,4 +1,4 @@
-# FindFreeAI — AI Proxy + Dashboard สำหรับใช้ AI ฟรีตลอดไป
+# SML AI Router — AI Proxy + Dashboard สำหรับใช้ AI ฟรีตลอดไป
 
 ระบบค้นหา ทดสอบ ให้คะแนน และเป็น **AI Proxy** ให้แอปอื่น (เช่น OpenClaw) เรียกใช้ AI ฟรีโดยไม่ต้อง config ใหม่เรื่อยๆ
 
@@ -70,8 +70,8 @@
 ### ติดตั้ง
 
 ```bash
-git clone https://github.com/smlsoft/findfreeai.git
-cd findfreeai
+git clone https://github.com/smlsoft/smlairouter.git
+cd smlairouter
 ```
 
 ### ใส่ API Key
@@ -131,7 +131,7 @@ MODEL_NAME=auto
 
 ถ้ารันบน Docker network เดียวกัน:
 ```env
-OPENAI_API_BASE=http://findfreeai-proxy:8900/v1
+OPENAI_API_BASE=http://smlairouter-proxy:8900/v1
 ```
 
 ## API Reference
@@ -176,7 +176,7 @@ openrouter/meta-llama/llama-3-8b-instruct:free → OpenRouter model ฟรี
 ## ไฟล์ทั้งหมด
 
 ```
-findfreeai/
+smlairouter/
 ├── app.py              ← Dashboard + Scanner + Tester
 ├── claude_brain.py     ← สมอง — เรียก Claude CLI วิเคราะห์
 ├── proxy.py            ← AI Proxy (OpenRouter-style Gateway)

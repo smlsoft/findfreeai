@@ -81,8 +81,10 @@ def load_providers():
 PROVIDERS = load_providers()
 
 # ==================== RUNTIME STATE ====================
-stats = {}  # provider_id -> {success, fail, avg_latency, total_latency, last_error, last_ok, requests_this_minute, minute_start}
+stats = {}  # provider_id -> {success, fail, avg_latency, total_latency, last_error, last_ok}
 request_log = []  # recent requests for dashboard
+_stats_reset_time = time.time()  # auto-reset ทุก 30 นาที
+STATS_RESET_INTERVAL = 1800  # 30 นาที
 active_config = {
     "mode": "auto",  # auto | manual | round-robin
     "preferred_provider": None,
@@ -155,7 +157,14 @@ def save_keys(keys):
 
 
 def get_available_providers():
-    """คืน providers ที่มี key เรียงตาม dynamic priority — ตัดตัวช้า/fail ออก"""
+    """คืน providers ที่มี key เรียงตาม dynamic priority — ลด priority ตัวช้า/fail แต่ไม่ปิดทั้งหมด"""
+    global _stats_reset_time
+    # Auto-reset stats ทุก 30 นาที — ให้โอกาส provider ที่เคย fail
+    if time.time() - _stats_reset_time > STATS_RESET_INTERVAL:
+        log.info("🔄 Auto-reset provider stats (30 นาทีแล้ว)")
+        stats.clear()
+        _stats_reset_time = time.time()
+
     keys = load_keys()
     available = []
     for pid, p in PROVIDERS.items():
@@ -165,16 +174,20 @@ def get_available_providers():
         s = get_stats(pid)
         dp = p["priority"]
 
-        # === Auto-disable: ตัดตัวที่ fail เยอะหรือช้ามาก ===
+        # === Penalize ตัวที่ fail เยอะหรือช้า (แต่ไม่ปิด — ลด priority แทน) ===
         total = s["success"] + s["fail"]
         if total >= 5:
             fail_rate = s["fail"] / total
-            if fail_rate > 0.8:
-                log.info(f"  🚫 {pid}: ปิดชั่วคราว (fail {s['fail']}/{total} = {fail_rate:.0%})")
-                continue  # ข้ามไปเลย
+            if fail_rate > 0.9:
+                dp -= 80  # แย่มาก แต่ยังใช้ได้ถ้าไม่มีตัวอื่น
+            elif fail_rate > 0.7:
+                dp -= 50
+            elif fail_rate > 0.5:
+                dp -= 30
         if s["avg_latency"] > 8000 and s["success"] > 3:
-            log.info(f"  🐌 {pid}: ปิดชั่วคราว (avg {s['avg_latency']}ms > 8000ms)")
-            continue  # ช้าเกิน 8 วินาที ข้ามไป
+            dp -= 40  # ช้ามาก
+        elif s["avg_latency"] > 5000 and s["success"] > 3:
+            dp -= 20
 
         # === Dynamic priority ===
         if s["fail"] > 5 and s["success"] == 0:

@@ -1,5 +1,5 @@
 services:
-  # Proxy รันบน Docker — ไม่ใช้ Claude CLI
+  # Proxy รันบน Docker
   findfreeai-proxy:
     build: .
     container_name: findfreeai-proxy
@@ -20,5 +20,31 @@ services:
       retries: 3
       start_period: 10s
 
-# Dashboard รันบน host (python app.py) เพื่อใช้ Claude CLI
+  # OpenClaw Chat — ใช้ FindFreeAI Proxy (port 18790)
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: findfreeai-openclaw
+    restart: unless-stopped
+    ports:
+      - "18790:18789"
+    volumes:
+      - ./openclaw-test:/home/node/.openclaw
+    environment:
+      - HOME=/home/node
+      - TZ=Asia/Bangkok
+      - FINDFREEAI_API_KEY=any
+      - OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1
+    command: ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789"]
+    depends_on:
+      - findfreeai-proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# Dashboard รันบน host (python app.py)
 # คำสั่ง: python app.py

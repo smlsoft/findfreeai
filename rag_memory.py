@@ -37,7 +37,11 @@ def get_session_id_from_request(headers, messages):
     # สร้างจาก first user message (stable)
     for m in messages:
         if m.get("role") == "user":
-            return hashlib.md5(m["content"][:100].encode()).hexdigest()[:12]
+            c = m["content"]
+            if isinstance(c, list):
+                c = " ".join(p.get("text","") if isinstance(p,dict) else str(p) for p in c)
+            c = str(c) if c else ""
+            return hashlib.md5(c[:100].encode()).hexdigest()[:12]
     return "default"
 
 
@@ -74,6 +78,12 @@ def save_session(session):
 
 def append_message(session_id, role, content, provider=None):
     """เพิ่มข้อความลง session"""
+    # แปลง content list → string (OpenClaw ส่ง content เป็น list ได้)
+    if isinstance(content, list):
+        content = " ".join(p.get("text","") if isinstance(p,dict) else str(p) for p in content)
+    content = str(content) if content else ""
+    if not content:
+        return
     session = get_or_create_session(session_id)
     tokens = estimate_tokens(content)
     msg = {
@@ -140,16 +150,23 @@ def get_context_for_request(session_id, new_messages):
         result.append({"role": m["role"], "content": m["content"]})
 
     # 3) ใส่ new messages จาก request (เฉพาะที่ยังไม่มี)
-    existing_contents = {m["content"] for m in result}
+    def _content_str(c):
+        """แปลง content เป็น string — OpenClaw ส่ง content เป็น list ได้"""
+        if isinstance(c, list):
+            return " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in c)
+        return str(c) if c else ""
+
+    existing_contents = {_content_str(m["content"]) for m in result}
     for m in new_messages:
-        if m.get("content") not in existing_contents:
-            result.append({"role": m["role"], "content": m["content"]})
+        cs = _content_str(m.get("content", ""))
+        if cs and cs not in existing_contents:
+            result.append({"role": m["role"], "content": cs})
 
     # จำกัด tokens
-    total = sum(estimate_tokens(m["content"]) for m in result)
+    total = sum(estimate_tokens(_content_str(m["content"])) for m in result)
     while total > TOKEN_BUDGET and len(result) > 2:
         removed = result.pop(1)  # ลบข้อความเก่าสุด (เก็บ system msg)
-        total -= estimate_tokens(removed["content"])
+        total -= estimate_tokens(_content_str(removed["content"]))
 
     return result
 

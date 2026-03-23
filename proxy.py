@@ -22,6 +22,9 @@ from urllib.error import URLError, HTTPError
 from summarizer import detect_query_type
 from skill_engine import record_call, get_best_providers_for_type, classify_error, get_skill_summary, recompute_routing
 from rag_memory import get_session_id_from_request, get_context_for_request, append_message, list_sessions, get_or_create_session, delete_session, cleanup_old_sessions
+# semantic_cache ยกเลิกแล้ว
+from cost_tracker import track_request, get_cost_summary, reset_tracking
+from virtual_keys import validate_key, record_usage, list_keys as list_vkeys, create_key, delete_key, toggle_key
 
 if sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -86,6 +89,7 @@ active_config = {
     "preferred_model": None,
     "max_retries": 3,
     "timeout": 30,
+    "system_prompt": "คุณคือ AI ผู้ช่วยอัจฉริยะ ตอบภาษาไทยเป็นหลัก กระชับ ชัดเจน เป็นมิตร ช่วยเหลือได้ทุกเรื่อง ถ้าถามเรื่องเทคนิคให้อธิบายแบบเข้าใจง่าย",
 }
 
 
@@ -244,6 +248,200 @@ def resolve_provider_model(model_str):
     return [(p, model_str) for p in providers]
 
 
+# ==================== STREAMING FORWARD ====================
+
+def forward_chat_stream(body_bytes, handler, model_override="", request_headers=None):
+    """Forward chat completion as SSE stream — ส่งทีละ chunk"""
+    try:
+        data = json.loads(body_bytes)
+    except Exception:
+        handler.send_response(400)
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(json.dumps({"error": {"message": "Invalid JSON"}}).encode("utf-8"))
+        return
+
+    original_model = model_override or data.get("model", "")
+    messages = data.get("messages", [])
+
+    # System Prompt injection
+    sys_prompt = active_config.get("system_prompt", "")
+    if sys_prompt and not any(m.get("role") == "system" for m in messages):
+        messages.insert(0, {"role": "system", "content": sys_prompt})
+        data["messages"] = messages
+
+    # RAG context
+    session_id = get_session_id_from_request(request_headers or {}, messages)
+    last_user_msg = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            c = m["content"]
+            last_user_msg = " ".join(p.get("text","") if isinstance(p,dict) else str(p) for p in c) if isinstance(c, list) else str(c)
+            break
+    # ตรวจว่ามีรูปไหม (ก่อน RAG จะแปลง content)
+    _has_image_in_msg = any(
+        isinstance(m.get("content"), list) and any(
+            isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
+        ) for m in messages
+    )
+
+    # ถ้าไม่มีรูป → inject RAG context ปกติ, ถ้ามีรูป → ข้ามเพื่อรักษา image data
+    if session_id != "default" and not _has_image_in_msg:
+        data["messages"] = get_context_for_request(session_id, messages)
+    if last_user_msg:
+        append_message(session_id, "user", last_user_msg)
+
+    query_type = detect_query_type(last_user_msg) if last_user_msg else "chat"
+    data["stream"] = True
+
+    # === Debug: log content types ===
+    for msg in data.get("messages", []):
+        c = msg.get("content", "")
+        if isinstance(c, list):
+            types = [p.get("type", "?") if isinstance(p, dict) else "str" for p in c]
+            log.info(f"  📋 Message content types: {types} (role={msg.get('role')})")
+
+    # === Payload optimization: ลด payload ให้เล็กพอสำหรับ free tier ===
+    # ลบ tools (free providers ไม่รองรับ OpenClaw tools)
+    if "tools" in data:
+        log.info(f"  🔧 ลบ tools ({len(data['tools'])} tools) เพื่อลด payload")
+        del data["tools"]
+    if "tool_choice" in data:
+        del data["tool_choice"]
+    # ตัด system prompt ที่ยาวเกิน 2000 chars
+    for msg in data.get("messages", []):
+        if msg.get("role") == "system" and isinstance(msg.get("content"), str) and len(msg["content"]) > 2000:
+            log.info(f"  ✂️ ตัด system prompt จาก {len(msg['content'])} → 2000 chars")
+            msg["content"] = msg["content"][:2000] + "\n\n[ตัดให้สั้นลง]"
+
+    # สำหรับ streaming: prefer Groq (ตอบ content ตรง ไม่มี reasoning field แปลก)
+    # OpenRouter nemotron ส่ง reasoning แยก content ว่าง → OpenClaw ค้าง
+    if original_model == "auto" or not original_model:
+        data["model"] = "auto"
+
+    targets = resolve_provider_model(original_model)
+    if not targets:
+        handler.send_response(503)
+        handler.send_header("Content-Type", "application/json")
+        handler.end_headers()
+        handler.wfile.write(json.dumps({"error": {"message": "ไม่มี provider พร้อมใช้!"}}).encode("utf-8"))
+        return
+
+    # === Vision Detection: ถ้ามีรูป → ใช้ OpenRouter (vision model ฟรี) ===
+    has_image = False
+    for msg in data.get("messages", []):
+        c = msg.get("content", "")
+        if isinstance(c, list):
+            for part in c:
+                if isinstance(part, dict) and part.get("type") == "image_url":
+                    has_image = True
+                    break
+
+    if has_image:
+        log.info("  🖼️ พบรูปภาพ → route ไป OpenRouter เท่านั้น (vision model)")
+        vision_targets = [(t[0], "qwen/qwen-2.5-vl-72b-instruct:free") for t in targets if t[0]["id"] == "openrouter"]
+        if vision_targets:
+            targets = vision_targets  # ใช้ OpenRouter เท่านั้น — provider อื่นไม่รองรับรูป
+        else:
+            log.warning("  ⚠️ ไม่มี OpenRouter key — ไม่สามารถวิเคราะห์รูปได้")
+    else:
+        # Text mode: ย้าย Groq ขึ้นหน้าสุด (ตอบ content ตรง, เร็ว)
+        groq_targets = [t for t in targets if t[0]["id"] == "groq"]
+        other_targets = [t for t in targets if t[0]["id"] != "groq"]
+        if groq_targets:
+            targets = groq_targets + other_targets
+
+    best_order = get_best_providers_for_type(query_type)
+    if best_order:
+        def sort_key(t):
+            pid = t[0]["id"]
+            return best_order.index(pid) if pid in best_order else 999
+        targets.sort(key=sort_key)
+
+    max_tries = min(active_config.get("max_retries", 3), len(targets))
+
+    for i in range(max_tries):
+        provider, model = targets[i]
+        pid = provider["id"]
+        api_base = provider["api_base"].rstrip("/")
+        url = f"{api_base}/chat/completions"
+        data["model"] = model
+        payload = json.dumps(data).encode("utf-8")
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {provider['api_key']}",
+            "User-Agent": "Mozilla/5.0 FindFreeAI/1.0",
+        }
+
+        log.info(f"[STREAM {i+1}/{max_tries}] {provider['name']} → {model}")
+        start = time.time()
+
+        try:
+            req = Request(url, data=payload, headers=headers, method="POST")
+            timeout = active_config.get("timeout", 30)
+            resp = urlopen(req, timeout=timeout)
+
+            # Send SSE headers
+            handler.send_response(200)
+            handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            handler.send_header("Cache-Control", "no-cache")
+            handler.send_header("Access-Control-Allow-Origin", "*")
+            handler.send_header("Access-Control-Allow-Headers", "*")
+            handler.send_header("Access-Control-Allow-Methods", "*")
+            handler.end_headers()
+
+            full_content = ""
+            for line in resp:
+                decoded = line.decode("utf-8", errors="replace")
+                handler.wfile.write(line)
+                handler.wfile.flush()
+                # Collect content for RAG
+                if decoded.startswith("data: ") and not decoded.startswith("data: [DONE]"):
+                    try:
+                        chunk = json.loads(decoded[6:])
+                        delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                        if delta:
+                            full_content += delta
+                    except Exception:
+                        pass
+
+            resp.close()
+            latency = round((time.time() - start) * 1000)
+            record_ok(pid, latency)
+            record_call(pid, query_type, latency, True)
+            add_request_log(provider["name"], model, "ok", latency, reason=f"Stream: {query_type}")
+            log.info(f"  ✅ STREAM {provider['name']} {latency}ms")
+
+            if full_content and session_id != "default":
+                append_message(session_id, "assistant", full_content, provider=pid)
+            return
+
+        except HTTPError as e:
+            latency = round((time.time() - start) * 1000)
+            last_err = f"HTTP {e.code}: {e.reason}"
+            record_fail(pid, last_err)
+            record_call(pid, query_type, latency, False, classify_error(e.code, last_err))
+            add_request_log(provider["name"], model, "fail", latency, last_err)
+            log.warning(f"  ❌ STREAM {provider['name']}: {last_err}")
+            continue
+        except Exception as e:
+            latency = round((time.time() - start) * 1000)
+            last_err = str(e)[:100]
+            record_fail(pid, last_err)
+            record_call(pid, query_type, latency, False, classify_error(0, last_err))
+            add_request_log(provider["name"], model, "fail", latency, last_err)
+            log.warning(f"  ❌ STREAM {provider['name']}: {last_err}")
+            continue
+
+    # All failed
+    handler.send_response(502)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.end_headers()
+    handler.wfile.write(json.dumps({"error": {"message": "ทุก provider ล้มเหลว"}}).encode("utf-8"))
+
+
 # ==================== FORWARD REQUEST ====================
 
 def forward_chat(body_bytes, model_override="", request_headers=None):
@@ -256,26 +454,66 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
     original_model = model_override or data.get("model", "")
     messages = data.get("messages", [])
 
+    # === System Prompt: inject ถ้ายังไม่มี ===
+    sys_prompt = active_config.get("system_prompt", "")
+    if sys_prompt and not any(m.get("role") == "system" for m in messages):
+        messages.insert(0, {"role": "system", "content": sys_prompt})
+        data["messages"] = messages
+
     # === RAG: inject context จาก session ===
     session_id = get_session_id_from_request(request_headers or {}, messages)
     last_user_msg = ""
     for m in reversed(messages):
         if m.get("role") == "user":
-            last_user_msg = m["content"]
+            c = m["content"]
+            last_user_msg = " ".join(p.get("text","") if isinstance(p,dict) else str(p) for p in c) if isinstance(c, list) else str(c)
             break
 
-    # Inject context (summary + recent history)
-    if session_id != "default":
+    # ตรวจว่ามีรูปไหม
+    _has_image_in_msg = any(
+        isinstance(m.get("content"), list) and any(
+            isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
+        ) for m in messages
+    )
+
+    # RAG ใช้เฉพาะข้อความ — ถ้ามีรูปข้าม RAG เพื่อรักษา image data
+    if session_id != "default" and not _has_image_in_msg:
         data["messages"] = get_context_for_request(session_id, messages)
 
     # Save user message to session
     if last_user_msg:
         append_message(session_id, "user", last_user_msg)
 
-    # === Skill: detect query type + smart routing ===
     query_type = detect_query_type(last_user_msg) if last_user_msg else "chat"
 
+    # === Payload optimization ===
+    if "tools" in data:
+        del data["tools"]
+    if "tool_choice" in data:
+        del data["tool_choice"]
+    for msg in data.get("messages", []):
+        if msg.get("role") == "system" and isinstance(msg.get("content"), str) and len(msg["content"]) > 2000:
+            msg["content"] = msg["content"][:2000] + "\n\n[ตัดให้สั้นลง]"
+
+    # === Vision Detection ===
+    has_image = False
+    for msg in data.get("messages", []):
+        c = msg.get("content", "")
+        if isinstance(c, list):
+            for part in c:
+                if isinstance(part, dict) and part.get("type") == "image_url":
+                    has_image = True
+                    break
+
+    # === Skill: detect query type + smart routing ===
     targets = resolve_provider_model(original_model)
+
+    if has_image:
+        log.info("  🖼️ พบรูปภาพ → route ไป OpenRouter (vision)")
+        vision_targets = [t for t in targets if t[0]["id"] == "openrouter"]
+        if vision_targets:
+            targets = [(t[0], "qwen/qwen-2.5-vl-72b-instruct:free") for t in vision_targets] + \
+                      [t for t in targets if t[0]["id"] != "openrouter"]
 
     if not targets:
         return 503, json.dumps({
@@ -355,6 +593,12 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
                     if s["success"] > 0:
                         reason_parts.append(f"avg {s['avg_latency']}ms, success {s['success']}")
 
+                    # === Cost Tracking ===
+                    usage = resp_data.get("usage", {})
+                    input_tokens = usage.get("prompt_tokens", 0)
+                    output_tokens = usage.get("completion_tokens", 0)
+                    cost_info = track_request(pid, model, input_tokens, output_tokens, latency, provider.get("api_key", "")[:8])
+
                     resp_data["_proxy"] = {
                         "provider": provider["name"],
                         "provider_id": pid,
@@ -364,8 +608,11 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
                         "query_type": query_type,
                         "session_id": session_id,
                         "reason": " | ".join(reason_parts),
+                        "tokens": input_tokens + output_tokens,
+                        "cost_usd": cost_info.get("cost_usd", 0),
                     }
                     resp_body = json.dumps(resp_data, ensure_ascii=False)
+
                 except Exception:
                     pass
 
@@ -450,6 +697,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             safe = {k: (v[:8] + "..." if len(v) > 8 else "***") for k, v in keys.items()}
             self._json(200, {"keys": safe, "count": len(keys)})
 
+        elif self.path.startswith("/v1/cache"):
+            self._json(200, {"status": "disabled", "message": "Semantic cache ถูกยกเลิกแล้ว"})
+
+        elif self.path.startswith("/v1/costs"):
+            self._json(200, get_cost_summary())
+
+        elif self.path.startswith("/v1/virtual-keys"):
+            self._json(200, {"keys": list_vkeys()})
+
         elif self.path.startswith("/v1/reload"):
             global PROVIDERS
             PROVIDERS = load_providers()
@@ -474,8 +730,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(cl) if cl > 0 else b""
 
         if self.path == "/v1/chat/completions":
-            status, resp = forward_chat(body, request_headers=dict(self.headers))
-            self._raw(status, resp)
+            # Check if client wants streaming
+            try:
+                req_data = json.loads(body)
+                is_stream = req_data.get("stream", False)
+            except Exception:
+                is_stream = False
+
+            if is_stream:
+                forward_chat_stream(body, self, request_headers=dict(self.headers))
+            else:
+                status, resp = forward_chat(body, request_headers=dict(self.headers))
+                self._raw(status, resp)
 
         elif self.path == "/v1/config":
             try:
@@ -514,6 +780,32 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._json(200, {"status": "ok"})
             except Exception as e:
                 self._json(400, {"error": str(e)})
+
+        elif self.path == "/v1/virtual-keys":
+            try:
+                data = json.loads(body)
+                action = data.get("action", "create")
+                if action == "create":
+                    raw_key, key_hash = create_key(
+                        data.get("name", "unnamed"),
+                        data.get("daily_limit", 1000),
+                        data.get("rpm_limit", 30),
+                        data.get("expires_days", 0),
+                    )
+                    self._json(200, {"status": "ok", "key": raw_key, "id": key_hash})
+                elif action == "delete":
+                    delete_key(data.get("id", ""))
+                    self._json(200, {"status": "ok"})
+                elif action == "toggle":
+                    toggle_key(data.get("id", ""), data.get("enabled", True))
+                    self._json(200, {"status": "ok"})
+                else:
+                    self._json(400, {"error": f"unknown action: {action}"})
+            except Exception as e:
+                self._json(400, {"error": str(e)})
+
+        elif self.path == "/v1/cache/clear":
+            self._json(200, {"status": "ok"})
 
         else:
             self._json(404, {"error": "not found"})

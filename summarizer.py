@@ -1,5 +1,6 @@
 """
-Summarizer — จำแนกประเภทคำถาม + สรุปบทสนทนา
+Summarizer — จำแนกประเภทคำถาม + สรุปบทสนทนา + Conditional Routing
+Multi-dimensional query analysis (เรียนรู้จาก FreeRouter 14-dimension classifier)
 Pure Python, ไม่ต้องลง library เพิ่ม
 """
 
@@ -12,6 +13,70 @@ STOPWORDS = set("a an the is are was were be been being have has had do does did
     "i me my we our you your he him his she her it its they them their this that these those "
     "what which who whom how when where why all each every both few more most other some such "
     "am very just also back only even still again further once here there".split())
+
+# === Query Type Detection (Enhanced) ===
+QUERY_PATTERNS = {
+    "code": {
+        "keywords": ["def ", "class ", "function", "import ", "```", "code", "error", "bug", "fix",
+                     "compile", "runtime", "syntax", "debug", "api", "endpoint", "database", "sql",
+                     "javascript", "python", "java", "react", "node", "html", "css", "git",
+                     "docker", "deploy", "server", "frontend", "backend", "framework"],
+        "weight": 1.0,
+        "prefer_model": "large",   # ใช้ model ใหญ่สำหรับ code
+        "prefer_context": "long",  # code ต้องการ context ยาว
+    },
+    "math": {
+        "keywords": ["calculate", "formula", "equation", "math", "sum", "average", "percent",
+                     "คำนวณ", "สูตร", "เฉลี่ย", "ผลรวม", "เปอร์เซ็นต์", "ดอกเบี้ย",
+                     "กำไร", "ขาดทุน", "ราคา", "ต้นทุน", "statistics", "probability"],
+        "weight": 1.2,
+        "prefer_model": "large",
+        "prefer_context": "short",
+    },
+    "creative": {
+        "keywords": ["write", "story", "poem", "create", "imagine", "generate", "compose",
+                     "เขียน", "เรื่อง", "บทกวี", "สร้าง", "แต่ง", "ออกแบบ", "ไอเดีย",
+                     "brainstorm", "creative", "design", "invent", "slogan", "caption"],
+        "weight": 0.8,
+        "prefer_model": "any",
+        "prefer_context": "short",
+    },
+    "factual": {
+        "keywords": ["what is", "who is", "explain", "describe", "define", "how does", "why",
+                     "คืออะไร", "อธิบาย", "บอก", "ประวัติ", "ที่มา", "history",
+                     "compare", "difference", "เปรียบเทียบ", "ต่างกัน"],
+        "weight": 0.9,
+        "prefer_model": "any",
+        "prefer_context": "short",
+    },
+    "translation": {
+        "keywords": ["translate", "แปล", "ภาษา", "english", "thai", "japanese", "chinese",
+                     "korean", "แปลเป็น", "in english", "in thai"],
+        "weight": 1.0,
+        "prefer_model": "large",
+        "prefer_context": "short",
+    },
+    "analysis": {
+        "keywords": ["analyze", "วิเคราะห์", "review", "evaluate", "assess", "summarize",
+                     "สรุป", "ประเมิน", "ตรวจสอบ", "วิจารณ์", "pros and cons"],
+        "weight": 1.1,
+        "prefer_model": "large",
+        "prefer_context": "long",
+    },
+    "chat": {
+        "keywords": [],  # default fallback
+        "weight": 0.5,
+        "prefer_model": "fast",   # chat ใช้ model เร็ว
+        "prefer_context": "short",
+    },
+}
+
+# === Model Size Preferences per Provider ===
+PROVIDER_MODEL_SIZE = {
+    "groq": {"large": "llama-3.3-70b-versatile", "fast": "llama-3.1-8b-instant"},
+    "cerebras": {"large": "llama3.1-70b", "fast": "llama3.1-8b"},
+    "sambanova": {"large": "Meta-Llama-3.1-70B-Instruct", "fast": "Meta-Llama-3.1-8B-Instruct"},
+}
 
 
 def estimate_tokens(text):
@@ -30,17 +95,63 @@ def keyword_extract(texts, top_n=10):
 
 
 def detect_query_type(message):
-    """จำแนกประเภทคำถาม"""
+    """จำแนกประเภทคำถาม — Multi-dimensional analysis"""
     msg = message.lower()
-    if any(k in msg for k in ["def ", "class ", "function", "import ", "```", "code", "error", "bug", "fix"]):
-        return "code"
-    if any(k in msg for k in ["calculate", "formula", "equation", "math", "sum", "average", "percent"]):
-        return "math"
-    if any(k in msg for k in ["write", "story", "poem", "create", "imagine", "generate", "compose"]):
-        return "creative"
-    if any(k in msg for k in ["what is", "who is", "explain", "describe", "define", "how does", "why"]):
-        return "factual"
-    return "chat"
+
+    scores = {}
+    for qtype, config in QUERY_PATTERNS.items():
+        if not config["keywords"]:
+            continue
+        matches = sum(1 for k in config["keywords"] if k in msg)
+        scores[qtype] = matches * config["weight"]
+
+    if not scores or max(scores.values()) == 0:
+        return "chat"
+
+    return max(scores, key=scores.get)
+
+
+def get_query_analysis(message):
+    """วิเคราะห์ query แบบละเอียด — return dict พร้อม recommendations"""
+    msg = message.lower()
+    query_type = detect_query_type(message)
+    config = QUERY_PATTERNS.get(query_type, QUERY_PATTERNS["chat"])
+
+    # คำนวณ complexity
+    msg_length = len(message)
+    if msg_length > 2000:
+        complexity = "high"
+    elif msg_length > 500:
+        complexity = "medium"
+    else:
+        complexity = "low"
+
+    # ภาษา
+    thai_chars = len(re.findall(r'[\u0e00-\u0e7f]', message))
+    en_chars = len(re.findall(r'[a-zA-Z]', message))
+    language = "thai" if thai_chars > en_chars else "english" if en_chars > 0 else "mixed"
+
+    return {
+        "type": query_type,
+        "complexity": complexity,
+        "language": language,
+        "prefer_model": config["prefer_model"],
+        "prefer_context": config["prefer_context"],
+        "estimated_tokens": estimate_tokens(message),
+        "recommended_max_tokens": 4096 if complexity == "high" else 2048 if complexity == "medium" else 1024,
+    }
+
+
+def get_best_model_for_query(query_type, provider_id):
+    """แนะนำ model ที่เหมาะสมกับประเภท query"""
+    config = QUERY_PATTERNS.get(query_type, QUERY_PATTERNS["chat"])
+    prefer = config["prefer_model"]
+
+    if provider_id in PROVIDER_MODEL_SIZE:
+        if prefer in PROVIDER_MODEL_SIZE[provider_id]:
+            return PROVIDER_MODEL_SIZE[provider_id][prefer]
+
+    return None  # ใช้ default model
 
 
 def summarize_messages(messages):

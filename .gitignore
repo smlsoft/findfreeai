@@ -7,6 +7,10 @@ api_keys.json
 free_ai_apis.json
 proxy_config.json
 data/
+openclaw-test/
+
+# Serena
+.serena/
 
 # Python
 __pycache__/

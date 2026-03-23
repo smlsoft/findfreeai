@@ -34,11 +34,13 @@ CONFIG_FILE = "proxy_config.json"
 PROVIDERS_FILE = "providers.json"
 PROXY_LOG = "proxy.log"
 
+from logging.handlers import RotatingFileHandler
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(PROXY_LOG, encoding="utf-8"),
+        RotatingFileHandler(PROXY_LOG, maxBytes=5*1024*1024, backupCount=3, encoding="utf-8"),
         logging.StreamHandler(),
     ],
 )
@@ -108,14 +110,15 @@ def record_fail(pid, err):
     s["last_error"] = f"{datetime.now().strftime('%H:%M:%S')} {err}"
 
 
-def add_request_log(provider, model, status, latency, error=""):
+def add_request_log(provider, model, status, latency, error="", reason=""):
     entry = {
-        "time": datetime.now().strftime("%H:%M:%S"),
+        "time": datetime.now().strftime("%H:%M:%S.%f")[:-3],
         "provider": provider,
         "model": model,
         "status": status,
         "latency_ms": latency,
         "error": error,
+        "reason": reason,
     }
     request_log.append(entry)
     if len(request_log) > 200:
@@ -322,7 +325,15 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
 
                 record_ok(pid, latency)
                 record_call(pid, query_type, latency, True)
-                add_request_log(provider["name"], model, "ok", latency)
+                # reason จะถูกสร้างตรงด้านล่าง แต่ log ก่อน
+                _reason = ""
+                if best_order and pid in best_order:
+                    _reason = f"Skill: '{query_type}' → {pid}"
+                elif i == 0:
+                    _reason = f"Priority สูงสุด"
+                else:
+                    _reason = f"Failover (attempt {i+1})"
+                add_request_log(provider["name"], model, "ok", latency, reason=_reason)
                 log.info(f"  ✅ {provider['name']} {latency}ms [{query_type}]")
 
                 # Save assistant response to RAG session
@@ -332,6 +343,18 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
                     if ai_content and session_id != "default":
                         append_message(session_id, "assistant", ai_content, provider=pid)
 
+                    # สร้าง reason ว่าทำไมเลือก provider นี้
+                    reason_parts = []
+                    if best_order and pid in best_order:
+                        reason_parts.append(f"Skill Engine เรียนรู้ว่า '{query_type}' ใช้ {pid} ดีที่สุด")
+                    elif i == 0:
+                        reason_parts.append(f"Priority สูงสุด ({provider.get('dp', provider.get('priority', 0))})")
+                    else:
+                        reason_parts.append(f"Failover จากตัวก่อนหน้า (attempt {i+1})")
+                    s = get_stats(pid)
+                    if s["success"] > 0:
+                        reason_parts.append(f"avg {s['avg_latency']}ms, success {s['success']}")
+
                     resp_data["_proxy"] = {
                         "provider": provider["name"],
                         "provider_id": pid,
@@ -340,6 +363,7 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
                         "attempt": i + 1,
                         "query_type": query_type,
                         "session_id": session_id,
+                        "reason": " | ".join(reason_parts),
                     }
                     resp_body = json.dumps(resp_data, ensure_ascii=False)
                 except Exception:

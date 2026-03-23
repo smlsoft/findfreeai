@@ -293,23 +293,52 @@ def resolve_provider_model(model_str):
                 p = providers[round_robin_idx]
                 return [(p, p["default_model"])]
         # Auto mode: เลือก model ที่ score ดีที่สุดจาก skill engine
+        # + Explore: ทุก 10 requests ลอง model ใหม่เพื่อเก็บ data
         try:
+            from skill_engine import load_skill_db
+            db = load_skill_db()
+            total_req = db.get("total_requests", 0)
+            explore = (total_req % 10 == 0)  # ทุก 10 requests = explore mode
+
+            if explore:
+                # Explore: สุ่มเลือก provider+model ที่ยังไม่มี data มาก
+                import random
+                all_models = []
+                for p in providers:
+                    for m in p.get("models", {}).keys():
+                        full_id = f"{p['id']}/{m}"
+                        model_data = db.get("models", {}).get(full_id, {})
+                        calls = model_data.get("ok", 0) + model_data.get("fail", 0)
+                        all_models.append((p, m, full_id, calls))
+                # เรียงตาม calls น้อยสุด (ยังไม่เคยลอง)
+                all_models.sort(key=lambda x: x[3])
+                if all_models:
+                    least_tested = [m for m in all_models if m[3] < 5]  # ยังทดสอบไม่ถึง 5 ครั้ง
+                    if least_tested:
+                        chosen = random.choice(least_tested[:5])
+                    else:
+                        chosen = random.choice(all_models[:3])
+                    p, model_name, full_id, calls = chosen
+                    log.info(f"  🔬 Explore mode: {full_id} (calls={calls}) — เก็บ data model ใหม่")
+                    result = [(p, model_name)]
+                    for p2 in providers:
+                        if p2["id"] != p["id"]:
+                            result.append((p2, p2["default_model"]))
+                    return result
+
+            # ปกติ: เลือก model ที่ score ดีที่สุด
             scores = get_scores()
             model_ranking = scores.get("model_ranking", [])
             if model_ranking:
-                # หา model ที่ score สูงสุดและ provider พร้อมใช้
                 provider_ids = {p["id"] for p in providers}
                 for ranked in model_ranking:
                     rpid = ranked.get("provider", "")
                     if rpid in provider_ids and ranked.get("score", 0) >= 40:
-                        # หา provider object
                         for p in providers:
                             if p["id"] == rpid:
                                 mid = ranked["id"]
-                                # ดึงชื่อ model จาก full id (provider/model → model)
                                 model_name = mid.split("/", 1)[1] if "/" in mid else mid
                                 log.info(f"  🎯 Auto-select: {mid} (score={ranked['score']} grade={ranked['grade']})")
-                                # ใส่ตัวนี้เป็นตัวแรก แล้วตามด้วย default ของตัวอื่น
                                 result = [(p, model_name)]
                                 for p2 in providers:
                                     if p2["id"] != rpid:

@@ -613,10 +613,27 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             latency = round((time.time() - start) * 1000)
             record_ok(pid, latency)
             record_call(pid, query_type, latency, True, model_id=model)
-            add_request_log(provider["name"], model, "ok", latency, reason=f"Stream: {query_type}")
-            log.info(f"  ✅ STREAM {provider['name']} {latency}ms")
 
-            # RAG ปิดแล้ว — ไม่ต้อง save message
+            # Cost tracking
+            tokens_est = max(1, len(full_content) // 4)  # estimate output tokens
+            cost_info = track_request(pid, model, 0, tokens_est, latency, provider.get("api_key", "")[:8])
+            cost_thb = round(cost_info.get("cost_usd", 0) * 35, 4)
+
+            add_request_log(provider["name"], model, "ok", latency,
+                reason=f"Stream: {query_type} | {tokens_est} tokens | ฿{cost_thb}")
+            log.info(f"  ✅ STREAM {provider['name']} {latency}ms [{query_type}] {tokens_est}t ฿{cost_thb}")
+
+            # ส่ง metadata chunk สุดท้าย — ให้ client รู้ว่าใช้ provider/model/cost อะไร
+            meta_content = f"\n\n---\n📡 {provider['name']} | {model} | {latency}ms | {tokens_est} tokens | ฿{cost_thb}"
+            meta_chunk = {
+                "choices": [{"index": 0, "delta": {"content": meta_content, "role": "assistant"}, "finish_reason": None}]
+            }
+            handler.wfile.write(f"data: {json.dumps(meta_chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
+            handler.wfile.flush()
+
+            # ส่ง DONE
+            handler.wfile.write(b"data: [DONE]\n\n")
+            handler.wfile.flush()
             return
 
         except HTTPError as e:

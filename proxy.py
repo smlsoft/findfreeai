@@ -31,6 +31,7 @@ PROXY_HOST = "0.0.0.0"
 PROXY_PORT = 8900
 JSON_FILE = "free_ai_apis.json"
 CONFIG_FILE = "proxy_config.json"
+PROVIDERS_FILE = "providers.json"
 PROXY_LOG = "proxy.log"
 
 logging.basicConfig(
@@ -44,118 +45,35 @@ logging.basicConfig(
 log = logging.getLogger("Proxy")
 
 # ==================== PROVIDER REGISTRY ====================
-PROVIDERS = {
-    "groq": {
-        "name": "Groq",
-        "api_base": "https://api.groq.com/openai/v1",
-        "env_key": "GROQ_API_KEY",
-        "models": {
-            "llama-3.3-70b-versatile": "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant": "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768": "mixtral-8x7b-32768",
-            "gemma2-9b-it": "gemma2-9b-it",
-        },
-        "default_model": "llama-3.3-70b-versatile",
-        "priority": 100,
-        "max_rpm": 30,
-    },
-    "cerebras": {
-        "name": "Cerebras",
-        "api_base": "https://api.cerebras.ai/v1",
-        "env_key": "CEREBRAS_API_KEY",
-        "models": {
-            "llama3.1-8b": "llama3.1-8b",
-            "llama3.1-70b": "llama3.1-70b",
-        },
-        "default_model": "llama3.1-70b",
-        "priority": 95,
-        "max_rpm": 30,
-    },
-    "sambanova": {
-        "name": "SambaNova",
-        "api_base": "https://api.sambanova.ai/v1",
-        "env_key": "SAMBANOVA_API_KEY",
-        "models": {
-            "Meta-Llama-3.1-8B-Instruct": "Meta-Llama-3.1-8B-Instruct",
-            "Meta-Llama-3.1-70B-Instruct": "Meta-Llama-3.1-70B-Instruct",
-        },
-        "default_model": "Meta-Llama-3.1-8B-Instruct",
-        "priority": 90,
-        "max_rpm": 0,
-    },
-    "openrouter": {
-        "name": "OpenRouter",
-        "api_base": "https://openrouter.ai/api/v1",
-        "env_key": "OPENROUTER_API_KEY",
-        "models": {
-            "meta-llama/llama-3-8b-instruct:free": "meta-llama/llama-3-8b-instruct:free",
-            "mistralai/mistral-7b-instruct:free": "mistralai/mistral-7b-instruct:free",
-            "google/gemma-2-9b-it:free": "google/gemma-2-9b-it:free",
-        },
-        "default_model": "meta-llama/llama-3-8b-instruct:free",
-        "priority": 85,
-        "max_rpm": 20,
-    },
-    "nvidia": {
-        "name": "NVIDIA NIM",
-        "api_base": "https://integrate.api.nvidia.com/v1",
-        "env_key": "NVIDIA_API_KEY",
-        "models": {
-            "meta/llama-3.1-8b-instruct": "meta/llama-3.1-8b-instruct",
-            "meta/llama-3.1-70b-instruct": "meta/llama-3.1-70b-instruct",
-        },
-        "default_model": "meta/llama-3.1-8b-instruct",
-        "priority": 75,
-        "max_rpm": 10,
-    },
-    "together": {
-        "name": "Together AI",
-        "api_base": "https://api.together.xyz/v1",
-        "env_key": "TOGETHER_API_KEY",
-        "models": {
-            "meta-llama/Llama-3-70b-chat-hf": "meta-llama/Llama-3-70b-chat-hf",
-            "meta-llama/Llama-3-8b-chat-hf": "meta-llama/Llama-3-8b-chat-hf",
-        },
-        "default_model": "meta-llama/Llama-3-70b-chat-hf",
-        "priority": 80,
-        "max_rpm": 60,
-    },
-    "mistral": {
-        "name": "Mistral AI",
-        "api_base": "https://api.mistral.ai/v1",
-        "env_key": "MISTRAL_API_KEY",
-        "models": {
-            "mistral-small-latest": "mistral-small-latest",
-            "open-mistral-7b": "open-mistral-7b",
-        },
-        "default_model": "mistral-small-latest",
-        "priority": 70,
-        "max_rpm": 5,
-    },
-    "deepinfra": {
-        "name": "DeepInfra",
-        "api_base": "https://api.deepinfra.com/v1/openai",
-        "env_key": "DEEPINFRA_API_KEY",
-        "models": {
-            "meta-llama/Meta-Llama-3-8B-Instruct": "meta-llama/Meta-Llama-3-8B-Instruct",
-        },
-        "default_model": "meta-llama/Meta-Llama-3-8B-Instruct",
-        "priority": 65,
-        "max_rpm": 30,
-    },
-    "cohere": {
-        "name": "Cohere",
-        "api_base": "https://api.cohere.ai/v1",
-        "env_key": "COHERE_API_KEY",
-        "models": {
-            "command-r": "command-r",
-            "command-r-plus": "command-r-plus",
-        },
-        "default_model": "command-r",
-        "priority": 60,
-        "max_rpm": 5,
-    },
-}
+# อ่านจาก providers.json — ไม่ hardcode, แก้ไขบน GitHub ได้เลย
+
+def load_providers():
+    """โหลด providers จาก providers.json"""
+    pfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), PROVIDERS_FILE)
+    try:
+        with open(pfile, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        raw = data.get("providers", {})
+        # แปลง models list → dict (proxy ใช้ dict format)
+        result = {}
+        for pid, p in raw.items():
+            models_list = p.get("models", [])
+            models_dict = {m: m for m in models_list}
+            result[pid] = {
+                "name": p.get("name", pid),
+                "api_base": p.get("api_base", ""),
+                "env_key": p.get("env_key", ""),
+                "models": models_dict,
+                "default_model": p.get("default_model", models_list[0] if models_list else ""),
+                "priority": p.get("priority", 50),
+                "max_rpm": p.get("max_rpm", 0),
+            }
+        return result
+    except Exception as e:
+        log.error(f"โหลด providers.json ไม่ได้: {e}")
+        return {}
+
+PROVIDERS = load_providers()
 
 # ==================== RUNTIME STATE ====================
 stats = {}  # provider_id -> {success, fail, avg_latency, total_latency, last_error, last_ok, requests_this_minute, minute_start}
@@ -507,6 +425,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
             keys = load_keys()
             safe = {k: (v[:8] + "..." if len(v) > 8 else "***") for k, v in keys.items()}
             self._json(200, {"keys": safe, "count": len(keys)})
+
+        elif self.path.startswith("/v1/reload"):
+            global PROVIDERS
+            PROVIDERS = load_providers()
+            self._json(200, {"status": "ok", "providers": len(PROVIDERS)})
 
         elif self.path.startswith("/v1/rag/sessions"):
             self._json(200, {"sessions": list_sessions()})

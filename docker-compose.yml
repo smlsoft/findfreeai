@@ -8,6 +8,7 @@ services:
       - "8900:8900"   # AI Proxy (OpenAI-compatible)
     volumes:
       - ./api_keys.json:/app/api_keys.json
+      - ./providers.json:/app/providers.json
       - ./data:/app/data
     environment:
       - PYTHONIOENCODING=utf-8

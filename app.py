@@ -77,7 +77,7 @@ KNOWN_SOURCES = [
         "api_base": "https://openrouter.ai/api/v1",
         "type": "chat",
         "free_tier": "มีโมเดลฟรี (ชื่อลงท้าย :free)",
-        "models": ["meta-llama/llama-3-8b-instruct:free", "mistralai/mistral-7b-instruct:free"],
+        "models": ["nvidia/nemotron-3-super-120b-a12b:free", "arcee-ai/trinity-mini:free"],
         "signup_url": "https://openrouter.ai/settings/keys",
         "signup_steps": "1. สมัครที่ openrouter.ai\n2. ไป Settings > Keys\n3. กด Create Key\n4. Copy key (ขึ้นต้น sk-or-)",
         "key_prefix": "sk-or-",
@@ -1106,12 +1106,38 @@ async function loadKeyForm() {
           <label style="font-size:13px;color:var(--text2);display:block;">${esc(p.name)}</label>
           <input type="text" id="key_${p.env}" placeholder="${esc(p.hint)}"
             value="${has ? existing[p.env] : ''}"
+            oninput="autoSaveKeys()"
             style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:monospace;font-size:13px;margin-top:2px;">
+          <span id="test_${p.env}" style="font-size:12px;"></span>
         </div>
+        <button onclick="testOneKey('${p.env}','${esc(p.name)}')" style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--accent);cursor:pointer;font-size:12px;white-space:nowrap;">ทดสอบ</button>
         <a href="${esc(p.url)}" target="_blank" style="font-size:12px;white-space:nowrap;">สมัคร →</a>
       </div>`;
     }).join('') + '</div>';
 }
+let _saveTimer = null;
+function autoSaveKeys() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveKeys, 1500);
+  document.getElementById('keySaveStatus').textContent = '⏳ กำลังบันทึก...';
+}
+
+async function testOneKey(envName, providerName) {
+  const el = document.getElementById('test_'+envName);
+  const key = document.getElementById('key_'+envName)?.value?.trim();
+  if(!key) { el.innerHTML='<span style="color:var(--red)">ไม่มี key</span>'; return; }
+  el.innerHTML='<span style="color:var(--yellow)">กำลังทดสอบ...</span>';
+  // save first
+  await saveKeys();
+  try {
+    const r = await fetch('/api/test-one-key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({env_name:envName})});
+    const d = await r.json();
+    if(d.status==='ok') el.innerHTML=`<span style="color:var(--green)">✅ ผ่าน (${d.latency_ms||''}ms)</span>`;
+    else if(d.status==='rate_limited') el.innerHTML='<span style="color:var(--yellow)">⚠️ Rate limited</span>';
+    else el.innerHTML=`<span style="color:var(--red)">❌ ${d.message||'ไม่ผ่าน'}</span>`;
+  } catch(e) { el.innerHTML='<span style="color:var(--red)">❌ Error</span>'; }
+}
+
 async function saveKeys() {
   const keys = {};
   KEY_PROVIDERS.forEach(p => {
@@ -1552,6 +1578,30 @@ class Handler(BaseHTTPRequestHandler):
                 finally: is_scanning = False
             threading.Thread(target=_brain, daemon=True).start()
             self._json({"status": "started"})
+        elif self.path == "/api/test-one-key":
+            cl = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(cl) if cl > 0 else b""
+            try:
+                data = json.loads(body)
+                env_name = data.get("env_name", "")
+                keys = load_api_keys()
+                key = keys.get(env_name, "")
+                if not key:
+                    self._json({"status": "no_key", "message": "ไม่มี key"})
+                    return
+                # หา provider info
+                src = None
+                for s in KNOWN_SOURCES:
+                    if s.get("env_name") == env_name:
+                        src = s
+                        break
+                if not src:
+                    self._json({"status": "error", "message": "ไม่พบ provider"})
+                    return
+                result = test_api_key(src["name"], src["api_base"], key, src["models"][0])
+                self._json(result)
+            except Exception as e:
+                self._json({"status": "error", "message": str(e)})
         elif self.path == "/api/keys":
             # บันทึก API keys
             cl = int(self.headers.get("Content-Length", 0))

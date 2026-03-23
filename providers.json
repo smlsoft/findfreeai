@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "updated": "2026-03-23",
+  "providers": {
+    "groq": {
+      "name": "Groq",
+      "api_base": "https://api.groq.com/openai/v1",
+      "env_key": "GROQ_API_KEY",
+      "models": [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+      ],
+      "default_model": "llama-3.3-70b-versatile",
+      "priority": 100,
+      "signup_url": "https://console.groq.com/keys",
+      "free_tier": "30 RPM / 14,400 req/day"
+    },
+    "cerebras": {
+      "name": "Cerebras",
+      "api_base": "https://api.cerebras.ai/v1",
+      "env_key": "CEREBRAS_API_KEY",
+      "models": [
+        "llama3.1-8b",
+        "llama3.1-70b"
+      ],
+      "default_model": "llama3.1-70b",
+      "priority": 95,
+      "signup_url": "https://cloud.cerebras.ai/",
+      "free_tier": "30 RPM"
+    },
+    "sambanova": {
+      "name": "SambaNova",
+      "api_base": "https://api.sambanova.ai/v1",
+      "env_key": "SAMBANOVA_API_KEY",
+      "models": [
+        "Meta-Llama-3.1-8B-Instruct",
+        "Meta-Llama-3.1-70B-Instruct"
+      ],
+      "default_model": "Meta-Llama-3.1-8B-Instruct",
+      "priority": 90,
+      "signup_url": "https://cloud.sambanova.ai/apis",
+      "free_tier": "Unlimited (rate limited)"
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "api_base": "https://openrouter.ai/api/v1",
+      "env_key": "OPENROUTER_API_KEY",
+      "models": [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "arcee-ai/trinity-large-preview:free",
+        "arcee-ai/trinity-mini:free",
+        "minimax/minimax-m2.5:free",
+        "stepfun/step-3.5-flash:free"
+      ],
+      "default_model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "priority": 85,
+      "signup_url": "https://openrouter.ai/settings/keys",
+      "free_tier": "Free models (:free suffix)"
+    },
+    "nvidia": {
+      "name": "NVIDIA NIM",
+      "api_base": "https://integrate.api.nvidia.com/v1",
+      "env_key": "NVIDIA_API_KEY",
+      "models": [
+        "meta/llama-3.1-8b-instruct",
+        "meta/llama-3.1-70b-instruct"
+      ],
+      "default_model": "meta/llama-3.1-8b-instruct",
+      "priority": 75,
+      "signup_url": "https://build.nvidia.com/explore/discover",
+      "free_tier": "1,000 free requests"
+    },
+    "together": {
+      "name": "Together AI",
+      "api_base": "https://api.together.xyz/v1",
+      "env_key": "TOGETHER_API_KEY",
+      "models": [
+        "meta-llama/Llama-3-70b-chat-hf",
+        "meta-llama/Llama-3-8b-chat-hf"
+      ],
+      "default_model": "meta-llama/Llama-3-70b-chat-hf",
+      "priority": 80,
+      "signup_url": "https://api.together.ai/settings/api-keys",
+      "free_tier": "$5 free credit"
+    },
+    "mistral": {
+      "name": "Mistral AI",
+      "api_base": "https://api.mistral.ai/v1",
+      "env_key": "MISTRAL_API_KEY",
+      "models": [
+        "mistral-small-latest",
+        "open-mistral-7b"
+      ],
+      "default_model": "mistral-small-latest",
+      "priority": 70,
+      "signup_url": "https://console.mistral.ai/api-keys/",
+      "free_tier": "Free for experiments"
+    },
+    "deepinfra": {
+      "name": "DeepInfra",
+      "api_base": "https://api.deepinfra.com/v1/openai",
+      "env_key": "DEEPINFRA_API_KEY",
+      "models": [
+        "meta-llama/Meta-Llama-3-8B-Instruct"
+      ],
+      "default_model": "meta-llama/Meta-Llama-3-8B-Instruct",
+      "priority": 65,
+      "signup_url": "https://deepinfra.com/dash/api_keys",
+      "free_tier": "Free rate-limited"
+    },
+    "cohere": {
+      "name": "Cohere",
+      "api_base": "https://api.cohere.ai/v1",
+      "env_key": "COHERE_API_KEY",
+      "models": [
+        "command-r",
+        "command-r-plus"
+      ],
+      "default_model": "command-r",
+      "priority": 60,
+      "signup_url": "https://dashboard.cohere.com/api-keys",
+      "free_tier": "Trial key 5 RPM"
+    }
+  }
+}

@@ -11,12 +11,13 @@
 
 	const tabs = [
 		{ id: 'dashboard', icon: '📡', label: 'Dashboard' },
-		{ id: 'chat', icon: '💬', label: 'Chat' },
 		{ id: 'keys', icon: '🔑', label: 'API Keys' },
 		{ id: 'tests', icon: '🧪', label: 'ผลทดสอบ' },
 		{ id: 'brain', icon: '🧠', label: 'AI วิเคราะห์' },
 		{ id: 'proxy', icon: '🔌', label: 'Proxy Config' },
 	];
+
+	let chatOpen = $state(true);
 	let activeTab = $state('dashboard');
 
 	async function poll() {
@@ -58,7 +59,10 @@
 	{/each}
 </nav>
 
-<main class="max-w-7xl mx-auto p-6">
+<div class="flex" style="height: calc(100vh - 105px);">
+
+<!-- Left: Main Content -->
+<main class="flex-1 overflow-y-auto p-6" style="min-width:0;">
 
 {#if activeTab === 'dashboard'}
 <!-- ==================== DASHBOARD ==================== -->
@@ -80,10 +84,10 @@
 		style="background: linear-gradient(135deg, var(--purple), #6e40c9);">
 		🧠 AI วิเคราะห์
 	</button>
-	<button onclick={() => activeTab = 'chat'}
+	<button onclick={() => chatOpen = !chatOpen}
 		class="px-8 py-4 rounded-2xl text-lg font-bold cursor-pointer border"
 		style="border-color: var(--accent); color: var(--accent); background: var(--bg2);">
-		💬 เปิด Chat
+		{chatOpen ? '◀ ซ่อน Chat' : '💬 เปิด Chat'}
 	</button>
 </div>
 
@@ -193,8 +197,6 @@
 	</div>
 </div>
 
-{:else if activeTab === 'chat'}
-	{#await import('./chat/+page.svelte') then { default: C }}<C />{/await}
 {:else if activeTab === 'keys'}
 	{#await import('./keys/+page.svelte') then { default: C }}<C />{/await}
 {:else if activeTab === 'tests'}
@@ -206,3 +208,23 @@
 {/if}
 
 </main>
+
+<!-- Right: OpenClaw Chat (always visible) -->
+<aside class="border-l flex flex-col" style="width: 420px; border-color: var(--border); background: var(--bg2);">
+	<div class="flex items-center justify-between px-3 py-2 border-b" style="border-color: var(--border); background: var(--bg3);">
+		<span class="font-bold text-sm">🦞 OpenClaw Chat</span>
+		<div class="flex items-center gap-2">
+			<button onclick={() => chatOpen = !chatOpen}
+				class="px-2 py-0.5 rounded text-xs cursor-pointer border"
+				style="border-color: var(--border); color: var(--text2); background: var(--bg);">
+				{chatOpen ? '◀ ซ่อน' : '▶ แสดง'}
+			</button>
+			<a href="http://127.0.0.1:18789" target="_blank" class="text-xs" style="color: var(--accent);">↗</a>
+		</div>
+	</div>
+	{#if chatOpen}
+		<iframe src="http://127.0.0.1:18789" class="flex-1 w-full border-0" title="OpenClaw"></iframe>
+	{/if}
+</aside>
+
+</div>

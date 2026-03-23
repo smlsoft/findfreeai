@@ -20,7 +20,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 from summarizer import detect_query_type
-from skill_engine import record_call, get_best_providers_for_type, classify_error, get_skill_summary, recompute_routing
+from skill_engine import record_call, get_best_providers_for_type, classify_error, get_skill_summary, recompute_routing, get_scores
 from rag_memory import get_session_id_from_request, get_context_for_request, append_message, list_sessions, get_or_create_session, delete_session, cleanup_old_sessions
 
 from cost_tracker import track_request, get_cost_summary, reset_tracking
@@ -513,7 +513,7 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             resp.close()
             latency = round((time.time() - start) * 1000)
             record_ok(pid, latency)
-            record_call(pid, query_type, latency, True)
+            record_call(pid, query_type, latency, True, model_id=model)
             add_request_log(provider["name"], model, "ok", latency, reason=f"Stream: {query_type}")
             log.info(f"  ✅ STREAM {provider['name']} {latency}ms")
 
@@ -525,7 +525,7 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             latency = round((time.time() - start) * 1000)
             last_err = f"HTTP {e.code}: {e.reason}"
             record_fail(pid, last_err)
-            record_call(pid, query_type, latency, False, classify_error(e.code, last_err))
+            record_call(pid, query_type, latency, False, classify_error(e.code, last_err), model_id=model)
             add_request_log(provider["name"], model, "fail", latency, last_err)
             log.warning(f"  ❌ STREAM {provider['name']}: {last_err}")
             continue
@@ -533,7 +533,7 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             latency = round((time.time() - start) * 1000)
             last_err = str(e)[:100]
             record_fail(pid, last_err)
-            record_call(pid, query_type, latency, False, classify_error(0, last_err))
+            record_call(pid, query_type, latency, False, classify_error(0, last_err), model_id=model)
             add_request_log(provider["name"], model, "fail", latency, last_err)
             log.warning(f"  ❌ STREAM {provider['name']}: {last_err}")
             continue
@@ -672,7 +672,7 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
                 resp_body = resp.read().decode("utf-8")
 
                 record_ok(pid, latency)
-                record_call(pid, query_type, latency, True)
+                record_call(pid, query_type, latency, True, model_id=model)
                 # reason จะถูกสร้างตรงด้านล่าง แต่ log ก่อน
                 _reason = ""
                 if best_order and pid in best_order:
@@ -733,7 +733,7 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
             last_err = f"HTTP {e.code}: {e.reason}"
             err_type = classify_error(e.code, last_err)
             record_fail(pid, last_err)
-            record_call(pid, query_type, latency, False, err_type)
+            record_call(pid, query_type, latency, False, err_type, model_id=model)
             add_request_log(provider["name"], model, "fail", latency, last_err)
             log.warning(f"  ❌ {provider['name']}: {last_err}")
             continue
@@ -743,7 +743,7 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
             last_err = str(e)[:100]
             err_type = classify_error(0, last_err)
             record_fail(pid, last_err)
-            record_call(pid, query_type, latency, False, err_type)
+            record_call(pid, query_type, latency, False, err_type, model_id=model)
             add_request_log(provider["name"], model, "fail", latency, last_err)
             log.warning(f"  ❌ {provider['name']}: {last_err}")
             continue
@@ -815,6 +815,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         elif self.path.startswith("/v1/cache"):
             self._json(200, {"status": "disabled", "message": "Semantic cache ถูกยกเลิกแล้ว"})
+
+        elif self.path.startswith("/v1/scores"):
+            self._json(200, get_scores())
 
         elif self.path.startswith("/v1/costs"):
             self._json(200, get_cost_summary())

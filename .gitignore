@@ -1,5 +1,12 @@
+# ความลับ — ห้าม commit
 .env
 api_keys.json
+
+# ข้อมูล runtime
 *.log
 free_ai_apis.json
+proxy_config.json
+data/
+
+# Python
 __pycache__/

@@ -1,22 +1,23 @@
 services:
-  findfreeai:
+  # Proxy รันบน Docker — ไม่ใช้ Claude CLI
+  findfreeai-proxy:
     build: .
-    container_name: findfreeai
+    container_name: findfreeai-proxy
     restart: unless-stopped
     ports:
-      - "8899:8899"   # Dashboard
-      - "8900:8900"   # AI Proxy
+      - "8900:8900"   # AI Proxy (OpenAI-compatible)
     volumes:
       - ./api_keys.json:/app/api_keys.json
       - ./data:/app/data
     environment:
       - PYTHONIOENCODING=utf-8
       - TZ=Asia/Bangkok
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8899/', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8900/', timeout=5)"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+# Dashboard รันบน host (python app.py) เพื่อใช้ Claude CLI
+# คำสั่ง: python app.py

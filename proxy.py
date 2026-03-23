@@ -774,7 +774,12 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
                 # Save assistant response to RAG session
                 try:
                     resp_data = json.loads(resp_body)
-                    ai_content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    # Normalize: ถ้า content=null แต่มี reasoning → เอา reasoning มาเป็น content
+                    msg_obj = resp_data.get("choices", [{}])[0].get("message", {})
+                    if not msg_obj.get("content") and msg_obj.get("reasoning"):
+                        msg_obj["content"] = msg_obj["reasoning"]
+                        log.info(f"  🔧 Normalize: reasoning → content ({len(msg_obj['content'])} chars)")
+                    ai_content = msg_obj.get("content", "")
                     if ai_content and session_id != "default":
                         append_message(session_id, "assistant", ai_content, provider=pid)
 

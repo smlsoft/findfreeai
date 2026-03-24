@@ -90,7 +90,7 @@ active_config = {
     "preferred_provider": None,
     "preferred_model": None,
     "max_retries": 3,
-    "timeout": 30,
+    "timeout": 15,
     "system_prompt": "คุณคือ AI ผู้ช่วยอัจฉริยะ ตอบภาษาไทยเป็นหลัก กระชับ ชัดเจน เป็นมิตร ช่วยเหลือได้ทุกเรื่อง ถ้าถามเรื่องเทคนิคให้อธิบายแบบเข้าใจง่าย",
 }
 
@@ -149,7 +149,7 @@ def compact_messages(messages):
 
 
 cooldowns = {}  # pid → timestamp เมื่อหมด cooldown
-COOLDOWN_429 = 60       # rate limit → cooldown 60 วินาที
+COOLDOWN_429 = 30       # rate limit → cooldown 30 วินาที
 COOLDOWN_SLOW = 30      # ช้าเกิน 10 วินาที → cooldown 30 วินาที
 COOLDOWN_ERROR = 15     # error อื่น → cooldown 15 วินาที
 SLOW_THRESHOLD_MS = 10000  # ช้าเกินนี้ → cooldown

@@ -37,6 +37,10 @@ CONFIG_FILE = "proxy_config.json"
 PROVIDERS_FILE = "providers.json"
 PROXY_LOG = "proxy.log"
 
+# Security/CORS (เหมาะกับ production เช่น Coolify)
+CORS_ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", "*")
+ADMIN_TOKEN = os.environ.get("PROXY_ADMIN_TOKEN", "").strip()
+
 from logging.handlers import RotatingFileHandler
 
 logging.basicConfig(
@@ -577,9 +581,9 @@ def forward_chat_stream(body_bytes, handler, model_override="", request_headers=
             handler.send_response(200)
             handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
             handler.send_header("Cache-Control", "no-cache")
-            handler.send_header("Access-Control-Allow-Origin", "*")
-            handler.send_header("Access-Control-Allow-Headers", "*")
-            handler.send_header("Access-Control-Allow-Methods", "*")
+            handler.send_header("Access-Control-Allow-Origin", CORS_ALLOWED_ORIGINS)
+            handler.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Proxy-Admin-Token")
+            handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             handler.end_headers()
 
             full_content = ""
@@ -924,10 +928,36 @@ def forward_chat(body_bytes, model_override="", request_headers=None):
 
 class ProxyHandler(BaseHTTPRequestHandler):
 
+    def _is_admin_request(self):
+        admin_paths = (
+            "/v1/config",
+            "/v1/reload",
+            "/v1/keys",
+            "/v1/virtual-keys",
+            "/v1/cache/clear",
+        )
+        return any(self.path.startswith(p) for p in admin_paths)
+
+    def _require_admin(self):
+        if not ADMIN_TOKEN:
+            return True
+        token = self.headers.get("X-Proxy-Admin-Token", "").strip()
+        if token == ADMIN_TOKEN:
+            return True
+        self._json(401, {
+            "error": "unauthorized",
+            "message": "admin token required",
+            "hint": "send header X-Proxy-Admin-Token",
+        })
+        return False
+
     def do_OPTIONS(self):
         self._cors(200)
 
     def do_GET(self):
+        if self._is_admin_request() and not self._require_admin():
+            return
+
         if self.path == "/":
             self._json(200, {
                 "name": "SML AI Router",
@@ -1010,6 +1040,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self):
+        if self._is_admin_request() and not self._require_admin():
+            return
+
         cl = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(cl) if cl > 0 else b""
 
@@ -1144,9 +1177,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _raw(self, status, body):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "*")
-        self.send_header("Access-Control-Allow-Methods", "*")
+        self.send_header("Access-Control-Allow-Origin", CORS_ALLOWED_ORIGINS)
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Proxy-Admin-Token")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
         if isinstance(body, str):
             body = body.encode("utf-8")
@@ -1154,9 +1187,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def _cors(self, status):
         self.send_response(status)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "*")
-        self.send_header("Access-Control-Allow-Methods", "*")
+        self.send_header("Access-Control-Allow-Origin", CORS_ALLOWED_ORIGINS)
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Proxy-Admin-Token")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
 
     def log_message(self, fmt, *args):
@@ -1169,6 +1202,10 @@ def create_env_example():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env.example")
     if not os.path.exists(path):
         lines = ["# SML AI Router — API Keys", "# สมัครฟรีทุกที่! ดูวิธีที่ http://127.0.0.1:8899", ""]
+        lines.append("# Security / CORS")
+        lines.append("CORS_ALLOWED_ORIGINS=*")
+        lines.append("PROXY_ADMIN_TOKEN=")
+        lines.append("")
         for pid, p in PROVIDERS.items():
             lines.append(f"# {p['name']}")
             lines.append(f"{p['env_key']}=")

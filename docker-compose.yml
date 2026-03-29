@@ -1,5 +1,5 @@
 services:
-  # Proxy รันบน Docker
+  # Proxy รันบน Docker (เหมาะกับ Coolify)
   smlairouter:
     build: .
     container_name: smlairouter
@@ -7,12 +7,28 @@ services:
     ports:
       - "8900:8900"   # AI Proxy (OpenAI-compatible)
     volumes:
-      - ./api_keys.json:/app/api_keys.json
-      - ./providers.json:/app/providers.json
+      - ./providers.json:/app/providers.json:ro
       - ./data:/app/data
+      # ถ้าต้องการใช้ไฟล์ key แทน env ให้สร้างไฟล์นี้แล้วค่อย uncomment
+      # - ./api_keys.json:/app/api_keys.json:ro
     environment:
       - PYTHONIOENCODING=utf-8
       - TZ=Asia/Bangkok
+      # แนะนำตั้งเป็นโดเมน frontend จริง เช่น https://chat.example.com
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-*}
+      # ถ้าตั้งค่า token นี้ admin endpoints จะต้องส่ง header X-Proxy-Admin-Token
+      - PROXY_ADMIN_TOKEN=${PROXY_ADMIN_TOKEN:-}
+
+      # Provider Keys (แนะนำใช้ env บน Coolify)
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - SAMBANOVA_API_KEY=${SAMBANOVA_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - DEEPINFRA_API_KEY=${DEEPINFRA_API_KEY:-}
+      - COHERE_API_KEY=${COHERE_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8900/', timeout=5)"]
       interval: 30s
@@ -20,7 +36,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # OpenClaw Chat — ใช้ SML AI Router Proxy (port 18790)
+  # OpenClaw Chat — ใช้ SML AI Router Proxy (optional)
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: smlairouter-openclaw
@@ -47,5 +63,4 @@ services:
       retries: 5
       start_period: 30s
 
-# Dashboard รันบน host (python app.py)
-# คำสั่ง: python app.py
+# Dashboard รันแยกได้ (python app.py) ถ้าต้องการใช้งาน UI
